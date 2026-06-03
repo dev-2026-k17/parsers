@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rain Table Parser</title>
+    <style>
+        :root {
+            --sidebar-width: 360px;
+            --primary: #2563eb;
+            --primary-light: #dbeafe;
+            --bg: #f1f5f9;
+            --panel: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --accent: #f8fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- HEADER --- */
+        header {
+            height: 56px;
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-weight: 800;
+            color: var(--primary);
+            letter-spacing: -0.5px;
+            font-size: 1.1rem;
+        }
+
+        /* --- MAIN LAYOUT --- */
+        main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar: Настройки */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: #fff;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 20px;
+            gap: 24px;
+            flex-shrink: 0;
+        }
+
+        /* Workspace: Вкладки и Контент */
+        .workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- TABS --- */
+        .tabs-nav {
+            display: flex;
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            padding: 14px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #64748b;
+            border-bottom: 2px solid transparent;
+            transition: 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--primary);
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* --- PANELS --- */
+        .panel {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--accent);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* --- INPUT OVERLAY --- */
+        #overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.9);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .input-card {
+            background: #fff;
+            width: 90%;
+            max-width: 700px;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        #dropzone {
+            height: 250px;
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 15px;
+            overflow: auto;
+            outline: none;
+            margin: 20px 0;
+            background: #fcfcfc;
+        }
+
+        #dropzone:empty:before {
+            content: "Вставьте таблицу из Word (Ctrl+V)...";
+            color: #94a3b8;
+        }
+
+        /* --- CONTROLS --- */
+        .section-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--text);
+            background: #fff;
+            transition: 0.2s;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: var(--primary-light);
+            color: var(--primary);
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            margin: 0 4px 6px 0;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+
+        .tag:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        /* --- DATA TABLE --- */
+        table.data-view {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            background: #fff;
+        }
+
+        table.data-view th {
+            background: var(--accent);
+            position: sticky;
+            top: 0;
+            text-align: left;
+            padding: 10px;
+            border: 1px solid var(--border);
+            z-index: 10;
+        }
+
+        table.data-view td {
+            padding: 10px;
+            border: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        table.data-view tr:hover {
+            background: var(--accent);
+        }
+
+        /* --- OUTPUT --- */
+        #finalOutput {
+            width: 100%;
+            height: 100%;
+            border: none;
+            resize: none;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.7;
+            outline: none;
+            padding: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #jsonView {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #059669;
+            white-space: pre;
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">⚡ TABLE PARSER <small>(by Rain)</small></div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;"
+                onclick="location.reload()">Новый импорт</button>
+        </div>
+    </header>
+
+    <!-- ЭТАП 1: ИМПОРТ -->
+    <div id="overlay">
+        <div class="input-card">
+            <h2 style="font-size: 24px; font-weight: 800;">Импорт таблицы</h2>
+            <p style="color: #64748b; font-size: 14px; margin-top: 8px;">Скопируйте таблицу из Word и вставьте её ниже.
+                Мы разберем структуру автоматически.</p>
+            <div id="dropzone" contenteditable="true"></div>
+            <div style="display: flex; justify-content: flex-end;">
+                <button class="btn btn-primary" onclick="app.import()">Проанализировать данные →</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="hidden" id="mainApp">
+        <!-- SIDEBAR: КОНФИГУРАЦИЯ -->
+        <div class="sidebar">
+
+            <div>
+                <span class="section-title">1. Конструктор строки</span>
+                <div id="tagCloud" style="margin-bottom: 10px;"></div>
+                <div class="group">
+                    <label>Шаблон вывода:</label>
+                    <input type="text" id="tplInput" placeholder="Напр: {Наименование} - {Кол-во} шт.">
+                </div>
+            </div>
+
+            <div>
+                <span class="section-title">2. Очистка данных</span>
+                <div class="group">
+                    <label>Удалять слова (через запятую):</label>
+                    <input type="text" id="cleanWords" value="лесополоса, л/п, участок, сектор">
+                </div>
+                <div class="group">
+                    <label>Удалять символы:</label>
+                    <input type="text" id="cleanChars" value="«,»,(,)">
+                </div>
+            </div>
+
+            <div>
+                <span class="section-title">3. Математика</span>
+                <div class="group">
+                    <label>Колонка для суммы:</label>
+                    <select id="sumCol"></select>
+                </div>
+                <div class="group">
+                    <label>Игнорировать если есть текст:</label>
+                    <input type="text" id="mathIgnore" value="2Б11, артикул">
+                </div>
+                <div class="group">
+                    <label>Макс. значение числа:</label>
+                    <input type="number" id="mathMax" value="100">
+                </div>
+            </div>
+
+            <div>
+                <span class="section-title">4. Структура</span>
+                <div class="group">
+                    <label>Наследовать пустоты из:</label>
+                    <select id="inhCol"></select>
+                </div>
+                <label class="group" style="flex-direction: row; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="useGrouping" checked style="width: auto;">
+                    <span>Группировать по разделам</span>
+                </label>
+            </div>
+
+        </div>
+
+        <!-- WORKSPACE -->
+        <div class="workspace">
+
+            <!-- Вкладки -->
+            <div class="tabs-nav">
+                <button class="tab-btn active" onclick="app.switchTab(event, 'tab-result')">Результат</button>
+                <button class="tab-btn" onclick="app.switchTab(event, 'tab-table')">Таблица данных</button>
+                <button class="tab-btn" onclick="app.switchTab(event, 'tab-json')">JSON Структура</button>
+            </div>
+
+            <!-- Контент вкладок -->
+            <div id="tab-result" class="tab-content active">
+                <div class="panel">
+                    <div class="panel-header">
+                        Сформированный текст
+                        <button class="tag" style="margin: 0;" onclick="app.copyResult()">Копировать всё</button>
+                    </div>
+                    <textarea id="finalOutput" spellcheck="false"
+                        placeholder="Настройте шаблон в сайдбаре..."></textarea>
+                </div>
+            </div>
+
+            <div id="tab-table" class="tab-content">
+                <div class="panel">
+                    <div class="panel-header">Распознанная сетка (Raw) <span id="rowCount"></span></div>
+                    <div style="overflow: auto; flex: 1;" id="tableContainer"></div>
+                </div>
+            </div>
+
+            <div id="tab-json" class="tab-content">
+                <div class="panel">
+                    <div class="panel-header">Технический объект</div>
+                    <div id="jsonView"></div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        const app = {
+            data: [],
+            headers: [],
+
+            import() {
+                const zone = document.getElementById('dropzone');
+                const table = zone.querySelector('table');
+                if (!table) return alert("Ошибка: Вставьте таблицу!");
+
+                this.parse(table);
+                document.getElementById('overlay').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+
+                this.initUI();
+                this.process();
+            },
+
+            parse(tableEl) {
+                let grid = [];
+                // 1. Строим сетку с учетом rowspan и colspan
+                for (let y = 0; y < tableEl.rows.length; y++) {
+                    let row = tableEl.rows[y];
+                    for (let c = 0; c < row.cells.length; c++) {
+                        let cell = row.cells[c];
+                        let x = 0;
+                        while (grid[y] && grid[y][x] !== undefined) x++;
+                        let txt = cell.innerText.trim().replace(/\s+/g, ' '); // Заменяет переносы и двойные пробелы на один пробел
+                        let rs = cell.rowSpan || 1, cs = cell.colSpan || 1;
+                        for (let i = 0; i < rs; i++) {
+                            if (!grid[y + i]) grid[y + i] = [];
+                            for (let j = 0; j < cs; j++) grid[y + i][x + j] = txt;
+                        }
+                    }
+                }
+
+                // 2. Ищем строку заголовка (где больше всего уникальных ячеек)
+                let hIdx = 0, maxU = 0;
+                grid.forEach((row, i) => {
+                    let u = new Set(row.filter(c => c)).size;
+                    if (u > maxU) { maxU = u; hIdx = i; }
+                });
+
+                // 3. Обработка заголовков (Умное удаление дубликатов Word)
+                let rawHeaders = grid[hIdx].map((h, i) => h || `Колонка_${i + 1}`);
+                this.headers = [];
+                let usedHeaders = new Map();
+
+                rawHeaders.forEach((h, i) => {
+                    // Проверяем, не является ли эта колонка полной копией предыдущей во всех строках
+                    let isDuplicateValue = i > 0 && grid.every(row => row[i] === row[i - 1]);
+
+                    if (usedHeaders.has(h) && isDuplicateValue) {
+                        this.headers.push(`_SKIP_${i}`); // Помечаем как ненужный дубль
+                    } else if (!usedHeaders.has(h)) {
+                        usedHeaders.set(h, 1);
+                        this.headers.push(h);
+                    } else {
+                        let count = usedHeaders.get(h) + 1;
+                        usedHeaders.set(h, count);
+                        this.headers.push(`${h}_${count}`);
+                    }
+                });
+
+                // 4. Сбор данных
+                this.data = [];
+                let currentGroup = "Основное";
+                for (let i = hIdx + 1; i < grid.length; i++) {
+                    let row = grid[i];
+                    if (!row || !row.join('').trim()) continue;
+
+                    let uniq = new Set(row.filter(c => c));
+                    if (uniq.size === 1 && row.filter(c => c).length > 0) {
+                        currentGroup = [...uniq][0];
+                        continue;
+                    }
+
+                    // ВОТ ТУТ ОБЪЯВЛЯЕТСЯ obj
+                    let obj = { _group: currentGroup };
+
+                    this.headers.forEach((h, idx) => {
+                        // Пропускаем колонки, помеченные как дубликаты
+                        if (!h.startsWith('_SKIP_')) {
+                            obj[h] = row[idx] || "";
+                        }
+                    });
+                    this.data.push(obj);
+                }
+
+                // Очищаем список заголовков от технических меток _SKIP_ для интерфейса
+                this.headers = this.headers.filter(h => !h.startsWith('_SKIP_'));
+            },
+
+            initUI() {
+                document.getElementById('tagCloud').innerHTML = this.headers.map(h => {
+                    // Экранируем обратные слеши, одинарные кавычки и переносы строк для JS-кода в атрибуте
+                    const escapedForJS = h
+                        .replace(/\\/g, '\\\\')
+                        .replace(/'/g, "\\'")
+                        .replace(/\n/g, '\\n')
+                        .replace(/\r/g, '');
+
+                    return `<span class="tag" onclick="app.addTag('{${escapedForJS}}')">{${h}}</span>`;
+                }).join('');
+
+                const opts = this.headers.map(h => `<option value="${h}">${h}</option>`).join('');
+                document.getElementById('sumCol').innerHTML = '<option value="">-- Нет --</option>' + opts;
+                document.getElementById('inhCol').innerHTML = '<option value="">-- Нет --</option>' + opts;
+
+                const h = this.headers;
+                const gSum = h.find(x => /колич|л\/с|сумм/i.test(x));
+                const gInh = h.find(x => /наимен|объект|лесополос/i.test(x));
+                if (gSum) document.getElementById('sumCol').value = gSum;
+                if (gInh) document.getElementById('inhCol').value = gInh;
+
+                document.getElementById('tplInput').value = `{${gInh || h[0]}} - {${gSum || h[1]}} в/с.`;
+
+                this.renderRawTable();
+
+                document.querySelectorAll('.sidebar input, .sidebar select').forEach(el => {
+                    el.addEventListener('input', () => this.process());
+                });
+            },
+
+            renderRawTable() {
+                let html = `<table class="data-view"><thead><tr><th>Группа</th>`;
+                this.headers.forEach(h => html += `<th>${h}</th>`);
+                html += `</tr></thead><tbody>`;
+                this.data.forEach(row => {
+                    html += `<tr><td>${row._group}</td>`;
+                    this.headers.forEach(h => html += `<td>${row[h]}</td>`);
+                    html += `</tr>`;
+                });
+                html += `</tbody></table>`;
+                document.getElementById('tableContainer').innerHTML = html;
+                document.getElementById('rowCount').innerText = `(${this.data.length} строк)`;
+                document.getElementById('jsonView').innerText = JSON.stringify(this.data, null, 2);
+            },
+
+            switchTab(e, tabId) {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                e.target.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+            },
+
+            addTag(tag) {
+                const input = document.getElementById('tplInput');
+
+                // Получаем позицию курсора
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                const value = input.value;
+
+                // Вставляем тег в позицию курсора
+                input.value = value.substring(0, start) + tag + value.substring(end);
+
+                // Возвращаем фокус на поле ввода
+                input.focus();
+
+                // Ставим курсор сразу после вставленного тега
+                const newCursorPos = start + tag.length;
+                input.setSelectionRange(newCursorPos, newCursorPos);
+
+                // Запускаем пересчет результата
+                this.process();
+            },
+
+            process() {
+                const config = {
+                    tpl: document.getElementById('tplInput').value,
+                    sumCol: document.getElementById('sumCol').value,
+                    inhCol: document.getElementById('inhCol').value,
+                    cleanWords: document.getElementById('cleanWords').value.split(',').map(s => s.trim().toLowerCase()),
+                    cleanChars: document.getElementById('cleanChars').value.split(',').map(s => s.trim()),
+                    mathIgnore: document.getElementById('mathIgnore').value.split(',').map(s => s.trim().toLowerCase()),
+                    mathMax: parseFloat(document.getElementById('mathMax').value) || 999999,
+                    useGrouping: document.getElementById('useGrouping').checked
+                };
+
+                let lastInh = "";
+                let aggregated = {};
+                const tags = (config.tpl.match(/\{([^}]+)\}/g) || []).map(t => t.slice(1, -1));
+
+                this.data.forEach(row => {
+                    let r = { ...row };
+                    if (config.inhCol) {
+                        if (r[config.inhCol]) lastInh = r[config.inhCol];
+                        else r[config.inhCol] = lastInh;
+                    }
+
+                    tags.forEach(t => {
+                        if (r[t] && typeof r[t] === 'string') {
+                            let val = r[t];
+                            config.cleanWords.forEach(w => { if (w) val = val.replace(new RegExp(w, 'gi'), ''); });
+                            config.cleanChars.forEach(c => { if (c) val = val.replace(new RegExp('\\' + c, 'g'), ''); });
+                            r[t] = val.trim().replace(/\s+/g, ' ');
+                        }
+                    });
+
+                    let currentSum = 0;
+                    if (config.sumCol && r[config.sumCol]) {
+                        let cellVal = r[config.sumCol].toString().toLowerCase();
+                        let isIgnored = config.mathIgnore.some(word => word && cellVal.includes(word));
+                        if (!isIgnored) {
+                            let nums = cellVal.match(/\d+/g);
+                            if (nums) nums.forEach(n => {
+                                let v = parseFloat(n);
+                                if (v <= config.mathMax) currentSum += v;
+                            });
+                        }
+                    }
+
+                    const key = (config.useGrouping ? r._group : '') + '||' +
+                        tags.filter(t => t !== config.sumCol).map(t => r[t]).join('|');
+
+                    if (!aggregated[key]) {
+                        aggregated[key] = { ...r, _computedSum: currentSum };
+                    } else {
+                        aggregated[key]._computedSum += currentSum;
+                        tags.forEach(t => {
+                            if (t !== config.sumCol && r[t] && !aggregated[key][t].includes(r[t])) {
+                                aggregated[key][t] += ', ' + r[t];
+                            }
+                        });
+                    }
+                });
+
+                let output = "";
+                let lastGrp = "";
+                Object.values(aggregated).forEach(r => {
+                    if (config.useGrouping && r._group !== lastGrp) {
+                        output += `\n[${r._group}]\n`;
+                        lastGrp = r._group;
+                    }
+                    let line = config.tpl;
+                    tags.forEach(t => {
+                        let val = (t === config.sumCol) ? r._computedSum : r[t];
+                        // Используем split/join вместо replace, чтобы заменить ВСЕ вхождения 
+                        // и не иметь проблем со спецсимволами в именах колонок
+                        line = line.split(`{${t}}`).join(val);
+                    });
+                    output += line + "\n";
+                });
+                document.getElementById('finalOutput').value = output.trim();
+            },
+
+            copyResult() {
+                const txt = document.getElementById('finalOutput');
+                txt.select();
+                document.execCommand('copy');
+                alert('Текст скопирован!');
+            }
+        };
+    </script>
+</body>
+
+</html>

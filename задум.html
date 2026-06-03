@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<!-- saved from url=(0058)file:///C:/Users/Atlas/Downloads/ai_studio_code%20(9).html -->
+<html lang="ru"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rain Military Parser</title>
+
+<style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; background: #0f1115; color: #d7dde5; font-family: "Segoe UI", Arial, sans-serif; }
+    h1 { margin-top: 0; color: #ffffff; font-size: 24px; }
+    .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .panel { background: #171b22; border: 1px solid #2c3440; border-radius: 10px; padding: 15px; display: flex; flex-direction: column; }
+    .panel h2 { margin-top: 0; font-size: 18px; color: #8fb7ff; }
+    textarea { width: 100%; min-height: 550px; resize: vertical; border: 1px solid #2c3440; background: #0f1318; color: #d7dde5; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.4; font-family: Consolas, monospace; }
+    .settings-toggle { background: #27313d; color: #9aa7b7; padding: 8px 15px; border-radius: 5px; cursor: pointer; display: inline-block; margin-bottom: 15px; font-size: 13px; border: 1px solid #3d4959; }
+    #settingsPanel { display: none; background: #1c232d; border: 1px solid #3d4959; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .toolbar { margin: 15px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+    button { background: #2e6ee6; border: none; color: white; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: 0.2s; }
+    button:hover { background: #4d84eb; }
+    button.secondary { background: #3d4959; }
+    button.danger { background: #852e2e; }
+    .stats { margin-top: 12px; color: #9aa7b7; font-size: 13px; }
+    .log { margin-top: 12px; background: #10151b; border: 1px solid #27313d; border-radius: 8px; padding: 10px; max-height: 150px; overflow: auto; font-size: 12px; color: #ffb86c; }
+    .ok { color: #7CFC98; }
+    .bad { color: #ff7272; }
+    @media (max-width: 1000px) { .container { grid-template-columns: 1fr; } }
+</style>
+</head>
+
+<body>
+
+<h1>Military Parser <small>(by Rain)</small></h1>
+
+<div class="settings-toggle" onclick="toggleSettings()">⚙️ Настройки синонимов и правил</div>
+
+<div id="settingsPanel">
+    <div style="margin-bottom:10px;">
+        <label style="display:block; margin-bottom:5px; font-size:12px; color:#8fb7ff;">Конфигурация (JSON):</label>
+        <textarea id="configJson" style="min-height: 300px;"></textarea>
+    </div>
+    <div style="display:flex; gap:10px;">
+        <button class="secondary" onclick="saveConfig()">Сохранить настройки</button>
+        <button class="danger" onclick="resetConfig()">Сбросить по умолчанию</button>
+    </div>
+</div>
+
+<div class="toolbar">
+    <button onclick="processMessages()">Преобразовать</button>
+    <button class="secondary" onclick="copyOutput()">Копировать результат</button>
+    <button class="secondary" onclick="clearAll()">Очистить</button>
+</div>
+
+<div class="container">
+    <div class="panel">
+        <h2>Входные данные</h2>
+        <textarea id="inputText" placeholder="Вставьте текст сводки сюда..."></textarea>
+        <div class="stats" id="stats">Успешно: 46 | Ошибок: 0</div>
+        <div class="log" id="log"></div>
+    </div>
+
+    <div class="panel">
+        <h2>Результат</h2>
+        <textarea id="outputText" readonly=""></textarea>
+    </div>
+</div>
+
+<script>
+const DEFAULT_CONFIG = {
+    "METADATA": {
+        "identification": "ворожий",
+        "probability": "ймовірний",
+        "source": "радіотехнічна розвідка (РТР)"
+    },
+    "MONTHS": {
+        "января": "01", "февраля": "02", "марта": "03", "апреля": "04",
+        "мая": "05", "июня": "06", "июля": "07", "августа": "08",
+        "сентября": "09", "октября": "10", "ноября": "11", "декабря": "12"
+    },
+    "TASKS": [
+        { "key": "усилить", "out": "посилити позицію", "type": "маршрут" },
+        { "key": "занять выгодную", "out": "зайняти вигідну позицію", "type": "маршрут" },
+        { "key": "занять", "out": "зайняти позицію", "type": "маршрут" },
+        { "key": "принять позицию", "out": "прийняти позицію", "type": "маршрут" },
+        { "key": "закрепиться", "out": "закріпитися", "type": "маршрут" },
+        { "key": "зачистку", "out": "провести зачистку", "type": "маршрут" },
+        { "key": "установку", "out": "провести мінування", "type": "мінування" },
+        { "key": "эвакуацию", "out": "провести евакуацію", "type": "евакуація" }
+    ],
+    "STOP_WORDS": [
+        "провести зачистку", "усилить позицию в районе", "усилить позицию в", 
+        "занять выгодную позицию в районе", "занять позицию в районе", "занять позицию в",
+        "принять позицию в районе", "закрепиться на участке", "закрепиться на промежуточной позиции",
+        "участка лесополосы", "участок лесополосы", "участка", "участок", 
+        "лесополосы", "лесополоса", "северо-западная окраина", "юго-западная окраина",
+        "северо-восточная окраина", "юго-восточная окраина", "северная окраина", 
+        "южная окраина", "западная окраина", "восточная окраина", "изгиб полевой дороги",
+        "на рубеже полевой дороги", "закрепиться на позиции"
+    ],
+    "SECTION_HEADERS": [
+        "Разведывательно-поисковые действия", "Установка минно-взрывных заграждений", 
+        "Эвакуация санитарных", "зачистка"
+    ]
+};
+
+let CONFIG = {};
+
+function loadConfig() {
+    const saved = localStorage.getItem('mil_parser_config_v64');
+    CONFIG = saved ? JSON.parse(saved) : DEFAULT_CONFIG;
+    document.getElementById('configJson').value = JSON.stringify(CONFIG, null, 4);
+}
+
+function saveConfig() {
+    try {
+        const val = document.getElementById('configJson').value;
+        CONFIG = JSON.parse(val);
+        localStorage.setItem('mil_parser_config_v64', val);
+        alert('Настройки сохранены!');
+    } catch (e) { alert('Ошибка JSON: ' + e.message); }
+}
+
+function resetConfig() {
+    if (confirm('Сбросить настройки?')) {
+        CONFIG = DEFAULT_CONFIG;
+        document.getElementById('configJson').value = JSON.stringify(CONFIG, null, 4);
+        localStorage.setItem('mil_parser_config_v64', JSON.stringify(CONFIG, null, 4));
+    }
+}
+
+function toggleSettings() {
+    const p = document.getElementById('settingsPanel');
+    p.style.display = p.style.display === 'block' ? 'none' : 'block';
+}
+
+// --- ЛОГИКА ---
+
+function expandRange(str) {
+    if (!str) return [];
+    return str.split(',').map(s => s.trim()).flatMap(part => {
+        let m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (m) {
+            let start = parseInt(m[1], 10), end = parseInt(m[2], 10);
+            if (start < end && end - start <= 50) { 
+                let res = [];
+                for(let i = start; i <= end; i++) res.push(i.toString());
+                return res;
+            }
+        }
+        return [part];
+    });
+}
+
+function cleanLocation(text) {
+    if (!text) return "";
+    let s = text;
+    
+    // 1. Если строка уже обработана (начинается с н.п.), просто чистим мусор
+    if (s.startsWith('н.п.')) {
+        return s.replace(/[«»"”„]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    // 2. Удаляем заголовки разделов и прилипшие названия лесополос в конце
+    CONFIG.SECTION_HEADERS.forEach(header => {
+        const regex = new RegExp("\\.?\\s*" + header + ".*", 'ig');
+        s = s.replace(regex, '');
+    });
+    
+    // Специальный фильтр для "лесополоса «НАЗВАНИЕ»" в конце строки
+    s = s.replace(/\.?\s*лесополоса\s*[«"”].*$/i, '');
+
+    // 3. Удаляем стоп-слова
+    CONFIG.STOP_WORDS.forEach(word => {
+        const regex = new RegExp(word, 'ig');
+        s = s.replace(regex, '');
+    });
+
+    // 4. Удаляем направления
+    s = s.replace(/\d+\s*м\s+(?:северо-западнее|юго-западнее|северо-восточнее|юго-восточнее|восточнее|западнее|южнее|севернее)\s+/ig, '');
+    s = s.replace(/(?:севернее|южнее|восточнее|западнее)\s+/ig, ''); 
+    
+    // 5. Форматируем одиночные дома
+    s = s.replace(/([А-ЯІЇЄA-Z][А-ЯІЇЄA-Zа-яіїєa-z\s-]*?)\s+(?:д\.|дом)\s*([0-9]+[а-яa-z0-9/-]*)(?:\s+сектор\s+\d+)?\s*(?:«([^»]+)»|["”]([^"”]+)["”]|([а-яА-ЯіІїЇєЄ]+))?/ig, (m, loc, house, c1, c2, c3) => {
+        let color = c1 || c2 || c3 || "";
+        let res = `н.п. ${loc.trim()}`;
+        if (color && !['сектор', 'дом', 'д'].includes(color.toLowerCase())) res += ` ${color}`;
+        if (house) res += ` ${house}`;
+        return res;
+    });
+
+    s = s.replace(/[«»"”„]/g, '');
+    return s.replace(/\s+/g, ' ').trim();
+}
+
+function expandTargets(targetStr) {
+    let s = targetStr;
+
+    // 1. Разворачиваем ДОМА
+    let housesRegex = /([А-ЯІЇЄA-Z][А-ЯІЇЄA-Zа-яіїєa-z\s-]*?)\s+\d+\s+домов\s*\(([\d,\s-]+)\)(?:\s+сектор\s+\d+)?(?:\s*(?:«([^»]+)»|["”]([^"”]+)["”]|([а-яА-ЯіІїЇєЄ]+)))?/g;
+    let houseMatches = [...s.matchAll(housesRegex)];
+    
+    if (houseMatches.length > 0) {
+        let expanded = [];
+        houseMatches.forEach(m => {
+            let loc = m[1].trim();
+            let nums = expandRange(m[2]);
+            let color = m[3] || m[4] || m[5] || "";
+            nums.forEach(n => {
+                let line = `н.п. ${loc}`;
+                if (color && !['сектор', 'домов'].includes(color.toLowerCase())) line += ` ${color}`;
+                line += ` ${n}`;
+                expanded.push(line);
+            });
+        });
+        return expanded.join('\n');
+    }
+
+    // 2. Разворачиваем ЛЕСОПОЛОСЫ
+    let forestRegex = /([А-ЯІЇЄA-Z-]{3,})(?:\s+([\d,\s-]+))?\s*\(([\d,\s-]+)\)/g;
+    let forestMatches = [...s.matchAll(forestRegex)];
+    if (forestMatches.length > 0) {
+        let expanded = [];
+        forestMatches.forEach(m => {
+            let name = m[1];
+            let nums = expandRange(m[2]);
+            let coords = expandRange(m[3]);
+            let maxLen = Math.max(nums.length, coords.length);
+            for (let i = 0; i < maxLen; i++) {
+                let n = nums.length > 0 ? (nums[i] || nums[nums.length - 1]) : "";
+                let c = coords[i] || coords[coords.length - 1]; 
+                expanded.push(n ? `${name} ${n} (${c})` : `${name} (${c})`);
+            }
+        });
+        return expanded.join('\n');
+    }
+
+    // 3. Обычные списки
+    if (s.includes(',') && !/^\([\d,\s-]+\)$/.test(s)) {
+        return s.split(/,(?![^\(\)]*\))/).map(x => x.trim()).join('\n');
+    }
+
+    return s;
+}
+
+function parseAction(text, currentRegiment) {
+    let data = {
+        time: "??:??", date: "??.??.????", whoStr: "", nazvaWho: "",
+        task: "виконати задачу", origin: "", isOriginForest: false, target: "", type: "маршрут"
+    };
+
+    let tMatch = text.match(/(?:с|з)\s+(\d{2})[:.](\d{2})/i);
+    if (tMatch) data.time = `${tMatch[1]}:${tMatch[2]}`;
+
+    let dMatch = text.match(/(\d{1,2})\s+([а-яА-Яa-zA-ZіІїЇєЄ]+)\s+(\d{4})/);
+    if (dMatch) {
+        let day = dMatch[1].padStart(2, '0');
+        let month = CONFIG.MONTHS[dMatch[2].toLowerCase()] || "01";
+        data.date = `${day}.${month}.${dMatch[3]}`;
+    }
+
+    let whoBlock = text.match(/(?:202\d\s*г\.|мая|июня|июля|августа|сентября|октября|ноября|декабря|января|февраля|марта|апреля)\s+(.*?)(?:в пешем|провести|с задачей|выдвинут)/i);
+    if (whoBlock) {
+        let w = whoBlock[1].trim().replace(/^202\d\s*г\.?\s*/i, ''); 
+        w = w.replace(/(?:одной|одним|двумя|тремя|четырьмя|пятью)\s+(?:штурмовой\s+)?(?:группой|группами|штатным расчетом|нештатной инженерно-саперной группой)\s+(?:закрепления\s+|эвакуации\s+|БпЛА кт\s+)?/i, '').trim();
+        w = w.replace(/чел\.?/g, 'в/сл.').replace(/№\s+/g, '№').replace(/,\s*$/, '').trim();
+        data.whoStr = w;
+        data.nazvaWho = w.replace(/\([^)]+\)/g, '').replace(/,/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    for (let t of CONFIG.TASKS) {
+        if (new RegExp(t.key, 'i').test(text)) {
+            data.task = t.out;
+            data.type = t.type;
+            break;
+        }
+    }
+
+    if (text.includes('выдвинут')) {
+        let parts = text.split(/с\s+задачей/i);
+        if (parts.length > 1) {
+            let originRaw = parts[0].replace(/.*исходного положения\s+/i, '').trim();
+            data.isOriginForest = /лесополос/i.test(originRaw);
+            data.origin = cleanLocation(originRaw);
+            
+            let expandedTarget = expandTargets(parts[1]);
+            data.target = expandedTarget.split('\n').map(line => cleanLocation(line)).join('\n');
+        }
+    } else {
+        let parts = text.split(/на рубеже:|из районов:?/i);
+        if (parts.length > 1) {
+            let expandedTarget = expandTargets(parts[1]);
+            data.target = expandedTarget.split('\n').map(line => cleanLocation(line)).join('\n');
+        }
+    }
+
+    return data;
+}
+
+function buildOutput(data, currentRegiment) {
+    let regMatch = currentRegiment.match(/(\d+)\s*(?:гв\.\s*)?мсп/i);
+    let regStr = regMatch ? `${regMatch[1]} мсп` : "мсп";
+
+    let lines = [
+        `Тип: ${data.type}`,
+        `підрозділ: ${regStr}`,
+        `ідентифікація: ${CONFIG.METADATA.identification}`,
+        `ймовірний`,
+        `джерело: ${CONFIG.METADATA.source}`,
+        `Час виявлення: ${data.date}`,
+        `Назва: ${data.nazvaWho ? data.nazvaWho + ' ' + regStr : regStr}`
+    ];
+    
+    const actionWord = data.type === "маршрут" ? "висунутись з вихідного положення" : "приступити до виконання задачі";
+    lines.push(`з ${data.time} ${actionWord} з метою ${data.task}:`);
+    
+    let groupPrefix = data.whoStr ? `Група ${data.whoStr}: ` : `Група: `;
+    let originStr = data.origin ? (data.origin.startsWith('н.п.') || data.isOriginForest ? data.origin : `н.п. ${data.origin}`) : "";
+
+    let targetLines = data.target.split('\n').filter(Boolean);
+    if (targetLines.length === 1) {
+        lines.push(`${groupPrefix}${originStr}${originStr ? ' -> ' : ''}${targetLines[0]}`);
+    } else {
+        lines.push(`${groupPrefix}${originStr}${originStr ? ' ->' : ''}`);
+        targetLines.forEach(t => lines.push(t));
+    }
+
+    return lines.join('\n');
+}
+
+function processMessages() {
+    const input = document.getElementById('inputText').value;
+    const logEl = document.getElementById('log');
+    logEl.innerHTML = '';
+    
+    let chunks = [];
+    let currentChunk = "";
+    input.split('\n').map(x => x.trim()).filter(Boolean).forEach(line => {
+        const isHeader = CONFIG.SECTION_HEADERS.some(h => line.includes(h));
+        // Проверка на "шумную" строку (заголовок лесополосы или села без глаголов)
+        const isForestNoise = /^лесополоса\s*[«"”].*[»"”]$/i.test(line) || (/^[А-ЯІЇЄ\s-]+$/g.test(line) && line.length < 30);
+
+        if (/мсп/i.test(line)) {
+            if (currentChunk) chunks.push({ type: 'action', text: currentChunk });
+            chunks.push({ type: 'unit', text: line });
+            currentChunk = "";
+        } else if (/^с\s+\d{2}[:.]\d{2}/i.test(line) || /^\d{1,2}\s+[а-я]+\s+\d{4}/i.test(line)) {
+            if (currentChunk) chunks.push({ type: 'action', text: currentChunk });
+            currentChunk = line;
+        } else if (isHeader || isForestNoise) {
+            // Если это шум или заголовок - закрываем текущий чанк и сбрасываем
+            if (currentChunk) chunks.push({ type: 'action', text: currentChunk });
+            currentChunk = ""; 
+        } else {
+            currentChunk = currentChunk ? currentChunk + " " + line : line;
+        }
+    });
+    if (currentChunk) chunks.push({ type: 'action', text: currentChunk });
+
+    let currentUnit = "Невідомий підрозділ", output = [], ok = 0, err = 0;
+    chunks.forEach(chunk => {
+        if (chunk.type === 'unit') { currentUnit = chunk.text; return; }
+        try {
+            const parsed = parseAction(chunk.text, currentUnit);
+            if (parsed.target) {
+                output.push(buildOutput(parsed, currentUnit));
+                ok++;
+            }
+        } catch (e) { err++; }
+    });
+
+    document.getElementById('outputText').value = output.join('\n\n');
+    document.getElementById('stats').innerHTML = `Успешно: ${ok} | Ошибок: ${err}`;
+}
+
+function copyOutput() {
+    const el = document.getElementById('outputText');
+    el.select();
+    document.execCommand('copy');
+}
+
+function clearAll() {
+    document.getElementById('inputText').value = '';
+    document.getElementById('outputText').value = '';
+}
+
+loadConfig();
+</script>
+
+
+</body></html>

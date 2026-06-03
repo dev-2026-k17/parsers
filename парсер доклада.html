@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Универсальный Парсер Сводок (by Rain)</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #333; }
+        .app-container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 350px 1fr; gap: 20px; }
+        
+        /* Настройки */
+        .settings { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); height: fit-content; }
+        .settings h3 { margin-top: 0; border-bottom: 2px solid var(--bg); padding-bottom: 10px; font-size: 18px; }
+        .field { margin-bottom: 15px; }
+        .field label { display: block; font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #666; }
+        .field input, .field textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-family: inherit; }
+        .field textarea { height: 60px; resize: vertical; }
+
+        /* Рабочая область */
+        .workspace { display: flex; flex-direction: column; gap: 15px; }
+        .editors { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; height: 65vh; }
+        textarea { width: 100%; height: 100%; padding: 15px; border: 1px solid #ddd; border-radius: 10px; font-family: 'Consolas', monospace; font-size: 13px; box-sizing: border-box; border-top: 4px solid var(--accent); }
+        
+        button.main-btn { padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.2s; }
+        button.main-btn:hover { background: #1a252f; transform: translateY(-1px); }
+        
+        .info { font-size: 12px; color: #888; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- Панель настроек -->
+    <div class="settings">
+        <h3>Настройки парсера <small>(by Rain)</small></h3>
+        
+        <div class="field">
+            <label>Населенные пункты (через запятую)</label>
+            <textarea id="cfg_settlements">ВАРВАРОВКА, ПРИЛУКИ, ЖОВТНЕВОЕ, ПЕТРОВКА, ЗЕЛЕНОЕ</textarea>
+            <div class="info">К этим словам будет добавлен префикс.</div>
+        </div>
+
+        <div class="field">
+            <label>Исключения (КАПС, который не адрес)</label>
+            <textarea id="cfg_exceptions">МСБ, МСП, ШРВ, АГС, ПТУР, РШГ, ПТРК, МОН</textarea>
+            <div class="info">Слова, которые парсер пропустит при поиске начала локации.</div>
+        </div>
+
+        <div class="field">
+            <label>Удалять слова (через запятую)</label>
+            <textarea id="cfg_remove">сектор, д., мсб, мсп, шрВ</textarea>
+            <div class="info">Эти слова будут полностью вырезаны из адреса.</div>
+        </div>
+
+        <div class="field">
+            <label>Префикс для локации</label>
+            <input type="text" id="cfg_prefix" value="н.п. ">
+        </div>
+
+        <hr>
+        <div class="info">
+            <b>Логика:</b><br>
+            1. Ищет заголовок (строка с "–" или "-" и "чел").<br>
+            2. В строках с "-" берет число.<br>
+            3. Ищет первое слово КАПСОМ (кроме исключений) — это старт адреса.<br>
+            4. Чистит адрес от "мусорных слов".
+        </div>
+    </div>
+
+    <!-- Основной интерфейс -->
+    <div class="workspace">
+        <button class="main-btn" onclick="processData()">ПРЕОБРАЗОВАТЬ ДОКУМЕНТ</button>
+        
+        <div class="editors">
+            <div>
+                <label style="font-weight:bold">Входящие данные:</label>
+                <textarea id="input_text" placeholder="Вставьте сюда текст сводки..."></textarea>
+            </div>
+            <div>
+                <label style="font-weight:bold">Результат:</label>
+                <textarea id="output_text" placeholder="Здесь будет готовый отчет..." readonly></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function processData() {
+        const input = document.getElementById('input_text').value;
+        const output = document.getElementById('output_text');
+        
+        // Читаем настройки
+        const settlements = document.getElementById('cfg_settlements').value.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+        const exceptions = document.getElementById('cfg_exceptions').value.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+        const toRemove = document.getElementById('cfg_remove').value.split(',').map(s => s.trim()).filter(s => s);
+        const npPrefix = document.getElementById('cfg_prefix').value;
+
+        const lines = input.split('\n');
+        let blocks = [];
+        let currentBlock = null;
+
+        lines.forEach(line => {
+            let str = line.trim();
+            if (!str) return;
+
+            // 1. Определение заголовка (не начинается с дефиса/маркера, содержит дефис/тире и "чел")
+            if (!str.match(/^[-•*]/) && str.match(/[–-]/) && str.includes('чел')) {
+                let headerName = str.split(/[–-]/)[0].trim();
+                currentBlock = { header: headerName, data: new Map() };
+                blocks.push(currentBlock);
+                return;
+            }
+
+            // 2. Обработка данных (строка начинается с дефиса или маркера)
+            if (str.match(/^[-•*]/)) {
+                if (!currentBlock) {
+                    currentBlock = { header: "Прочее", data: new Map() };
+                    blocks.push(currentBlock);
+                }
+
+                // Извлекаем количество
+                let countMatch = str.match(/^[-•*]?\s*(\d+)\s*чел/);
+                if (!countMatch) return;
+                let count = parseInt(countMatch[1]);
+
+                // Чистим от скобок
+                let cleanLine = str.replace(/\(.*?\)/g, '');
+
+                // Ищем начало локации
+                let words = cleanLine.split(/\s+/);
+                let startIndex = -1;
+
+                for (let i = 0; i < words.length; i++) {
+                    let wordOnly = words[i].replace(/[^А-ЯЁA-Z]/g, '');
+                    if (wordOnly.length >= 2 && wordOnly === wordOnly.toUpperCase() && !exceptions.includes(wordOnly)) {
+                        startIndex = i;
+                        break;
+                    }
+                }
+
+                if (startIndex !== -1) {
+                    let location = words.slice(startIndex).join(' ').split(';')[0];
+
+                    // Удаляем "мусорные слова" (с фиксом для кириллицы вместо \b)
+                    toRemove.forEach(word => {
+                        let escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        // Ищем слово, окруженное не-буквами (или начало/конец строки)
+                        let regex = new RegExp(`(^|[^а-яёa-z0-9])` + escaped + `\\.?\\s*`, 'gi');
+                        location = location.replace(regex, '$1');
+                    });
+
+                    // Дополнительная чистка "д." (если пользователь забыл добавить в настройки)
+                    location = location.replace(/(^|[^а-яёa-z])д\.\s*(?=\d)/gi, '$1');
+                    
+                    // Финальная нормализация пробелов
+                    location = location.replace(/\s+/g, ' ').trim();
+
+                    // Добавляем префикс н.п. (точный поиск слова)
+                    let upperLoc = location.toUpperCase();
+                    let hasSettlement = settlements.some(s => {
+                        let regex = new RegExp(`(^|[^А-ЯЁ])` + s + `(?=[^А-ЯЁ]|$)`, 'i');
+                        return regex.test(upperLoc);
+                    });
+
+                    if (hasSettlement && !location.startsWith(npPrefix.trim())) {
+                        location = npPrefix + location;
+                    }
+
+                    // Агрегация (Map сохраняет порядок добавления!)
+                    let currentSum = currentBlock.data.get(location) || 0;
+                    currentBlock.data.set(location, currentSum + count);
+                }
+            }
+        });
+
+        // Сборка результата
+        let finalResult = "";
+        blocks.forEach(b => {
+            if (b.data.size > 0) {
+                finalResult += b.header + ":\n";
+                // Перебираем ключи в порядке их появления в тексте
+                for (let [loc, count] of b.data) {
+                    finalResult += `${loc} - ${count} в/с;\n`;
+                }
+                finalResult += "\n";
+            }
+        });
+
+        output.value = finalResult.trim();
+    }
+</script>
+
+</body>
+</html>

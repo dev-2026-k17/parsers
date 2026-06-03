@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Парсер мін (by Rain)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #1e1e2f;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h2 {
+            color: #4da6ff;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #aaa;
+        }
+
+        textarea {
+            width: 100%;
+            height: 500px;
+            padding: 15px;
+            font-size: 14px;
+            font-family: monospace;
+            background-color: #2a2a3f;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 8px;
+            resize: vertical;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #4da6ff;
+            color: #1e1e2f;
+            border: none;
+            border-radius: 8px;
+        }
+
+        button:hover {
+            background-color: #3388dd;
+        }
+
+        .btn-copy {
+            background-color: #28a745;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Парсер координат та мін <small style="font-size: 14px; color: #aaa;">(by Rain)</small></h2>
+
+    <div class="container">
+        <div class="box">
+            <label>Вихідний текст:</label>
+            <textarea id="inputData" placeholder="Вставте текст..."></textarea>
+        </div>
+        <div class="box">
+            <label>Результат:</label>
+            <textarea id="outputData"></textarea>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="processData()">Обробити текст</button>
+        <button class="btn-copy" onclick="copyResult()">Скопіювати</button>
+    </div>
+
+    <script>
+        // Список сигнатур мін
+        const SIGNATURES = ['ПТМР', 'ПТРМ', 'ПТМ', 'ПОМ', 'ОЗМ', 'ВОГ', 'ДЖ', 'ТМ', 'УК', 'ПМН', 'МОН', 'ПФМ', 'РПГ', 'ПГ'];
+        
+        
+        // Стоп-слова для обрізання назви міни в межах одного рядка
+        const STOP_MARKERS = [
+            'Высота', 'Расход', 'Рассход', 'сброс', 'потеря', 'птица', 
+            'не бг', 'молния', 'перебивали', 'села', 'просад', 
+            'перехват', 'акб', 'батарея', 'ветер', 'РЭБ'
+        ];
+
+        function normalize(text) {
+            return text.normalize('NFKC').replace(/[\u202F\u00A0]/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
+        // НАДІЙНИЙ ПОШУК КООРДИНАТ (навіть якщо вони злилися з літерами X/Y)
+        function extractCoords(paragraph) {
+            // Шукаємо числа від 6 до 8 цифр, перед якими й після яких НЕМАЄ інших цифр
+            const matches = paragraph.match(/(?<!\d)\d{6,8}(?!\d)/g);
+            if (matches && matches.length >= 2) {
+                let x = matches[0];
+                let y = matches[1];
+                // Автокорекція X (починається на 5) та Y (починається на 7 або 6)
+                if (y.startsWith('5') && (x.startsWith('7') || x.startsWith('6'))) {
+                    [x, y] = [y, x];
+                }
+                return `${x} ${y}`;
+            }
+            return null;
+        }
+
+        // Покращений Розумний фільтр окремих слів міни
+        function smartMineFilter(line) {
+            // Додано сигнатури ДЖ та УК безпосередньо в корінь
+            const mineRoots = /^(пом|птм|тм|озм|вог|тбг|птмр|птрм|дж|ук)$/i;
+            const allowedModifiers = /^(джоник.*|дж|обл)$/i;
+            
+            let tokens = line.split(/\s+/);
+            let hasMineRoot = false;
+            
+            for (let token of tokens) {
+                let cleanToken = token.replace(/[.,\(\)]/g, '');
+                if (mineRoots.test(cleanToken)) {
+                    hasMineRoot = true;
+                    break;
+                }
+            }
+            
+            if (!hasMineRoot) return line;
+            
+            let filteredTokens = [];
+            for (let i = 0; i < tokens.length; i++) {
+                let token = tokens[i];
+                let cleanToken = token.replace(/[.,\(\)]/g, '');
+                if (!cleanToken) continue;
+                
+                const isRoot = mineRoots.test(cleanToken);
+                const isAllowedMod = allowedModifiers.test(cleanToken);
+
+                if (isRoot || isAllowedMod) {
+                    filteredTokens.push(token);
+                } else if (cleanToken.length <= 3 && !/^\d+$/.test(cleanToken)) {
+                    // Короткі слова з літерами (наприклад "шт", "вт", "ук")
+                    filteredTokens.push(token);
+                } else if (/\d/.test(cleanToken)) {
+                    const isPureNumber = /^\d+$/.test(cleanToken);
+                    
+                    if (isPureNumber) {
+                        // ПРАВИЛО ЧИСТИХ ЧИСЕЛ (наприклад "22", "6"):
+                        // 1. Залишаємо, якщо число йде одразу після кореня міни (напр. "Пом 2")
+                        let precededByRoot = false;
+                        for (let j = i - 1; j >= 0; j--) {
+                            let prevClean = tokens[j].replace(/[.,\(\)]/g, '');
+                            if (prevClean) {
+                                if (mineRoots.test(prevClean)) precededByRoot = true;
+                                break;
+                            }
+                        }
+
+                        // 2. Залишаємо, якщо число стоїть одразу перед словом "шт" (напр. "2 шт")
+                        let followedByUnit = false;
+                        for (let j = i + 1; j < tokens.length; j++) {
+                            let nextClean = tokens[j].replace(/[.,\(\)]/g, '').toLowerCase();
+                            if (nextClean) {
+                                if (nextClean === 'шт' || nextClean === 'pcs') followedByUnit = true;
+                                break;
+                            }
+                        }
+
+                        if (precededByRoot || followedByUnit) {
+                            filteredTokens.push(token);
+                        }
+                    } else {
+                        // Змішані буквено-цифрові модифікатори (напр. "Вт06-2", "3Р", "к2") залишаємо завжди
+                        filteredTokens.push(token);
+                    }
+                }
+            }
+            
+            return filteredTokens.join(' ');
+        }
+
+        // Екстрактор назви міни з абзацу
+        function extractPayload(p) {
+            let mine = "Міна не вказана";
+            let firstIdx = -1;
+
+            const upperP = p.toUpperCase();
+            SIGNATURES.forEach(sig => {
+                let idx = upperP.indexOf(sig);
+                if (idx !== -1 && (firstIdx === -1 || idx < firstIdx)) {
+                    firstIdx = idx;
+                }
+            });
+
+            if (firstIdx !== -1) {
+                let tail = p.substring(firstIdx);
+                
+                // Назва міни завжди на тому самому рядку, що й її перша згадка
+                tail = tail.split('\n')[0].trim();
+                
+                let endIdx = tail.length;
+                
+                stopMarkers = STOP_MARKERS;
+                stopMarkers.forEach(marker => {
+                    let mIdx = tail.toLowerCase().indexOf(marker.toLowerCase());
+                    if (mIdx !== -1 && mIdx < endIdx) endIdx = mIdx;
+                });
+
+                let emojiIdx = tail.search(/✅|❌/);
+                if (emojiIdx !== -1 && emojiIdx < endIdx) endIdx = emojiIdx;
+
+                mine = tail.substring(0, endIdx).trim();
+
+                // РОЗУМНЕ ВІДСІКАННЯ ДЕТОНАТОРІВ (якщо міна в рядку "Расход")
+                if (mine.includes(',')) {
+                    const parts = mine.split(',');
+                    if (/(эдп|нхпч)/i.test(parts[1])) {
+                        mine = parts[0].trim();
+                    }
+                }
+                
+                // Пропускаємо через розумний фільтр слів
+                mine = smartMineFilter(mine);
+                
+                // Прибираємо зайві коми та крапки в самому кінці
+                mine = mine.replace(/[,\.\-\s\:]+$/, '').trim();
+            }
+            return mine;
+        }
+
+        function processData() {
+            const rawText = document.getElementById('inputData').value;
+            
+            // Розбиваємо на абзаци (якорі: 1., 2., 3...)
+            let normalizedText = rawText.replace(/(?:\n|^)\s*(\d{1,2}[\.\)])/g, '\n\n$1');
+            const paragraphs = normalizedText.split(/\n\s*\n/);
+            const records = [];
+
+            for (let p of paragraphs) {
+                p = p.normalize('NFKC').replace(/[\u202F\u00A0]/g, ' ').trim();
+                if (!p) continue;
+
+                // Витягуємо координати
+                const coords = extractCoords(p);
+                if (!coords) continue;
+
+                // Витягуємо статус
+                let status = '❓';
+                if (p.includes('✅')) status = '✅';
+                else if (p.includes('❌')) status = '❌';
+
+                // Витягуємо міну
+                const mine = extractPayload(p);
+
+                records.push({ coords, status, mine });
+            }
+
+            // 3. АГРЕГАЦІЯ
+            const aggregated = new Map([['✅', new Map()], ['❌', new Map()], ['❓', new Map()]]);
+            for (const record of records) {
+                const statusMap = aggregated.get(record.status);
+                if (!statusMap.has(record.coords)) {
+                    statusMap.set(record.coords, { count: 0, mines: new Set() });
+                }
+                const entry = statusMap.get(record.coords);
+                entry.count += 1;
+                entry.mines.add(record.mine);
+            }
+
+            // 4. ВИВІД
+            let output = '';
+            const categories = [
+                { key: '✅', title: 'Вдало ✅:' },
+                { key: '❌', title: 'Невдало ❌:' },
+                { key: '❓', title: 'Без статусу ❓:' }
+            ];
+
+            for (const cat of categories) {
+                const map = aggregated.get(cat.key);
+                if (map && map.size > 0) {
+                    output += cat.title + '\n';
+                    for (const [coords, data] of map.entries()) {
+                        const minesStr = Array.from(data.mines).join(' + ');
+                        const countStr = data.count > 1 ? ` (${data.count} шт)` : '';
+                        output += `${coords} - ${minesStr}${countStr}\n`;
+                    }
+                    output += '\n';
+                }
+            }
+            document.getElementById('outputData').value = output.trim() || 'Дані не знайдені.';
+        }
+
+        function copyResult() {
+            const output = document.getElementById('outputData');
+            output.select();
+            document.execCommand('copy');
+            const btn = document.querySelector('.btn-copy');
+            const originalText = btn.innerText;
+            btn.innerText = 'Скопійовано!';
+            setTimeout(() => btn.innerText = originalText, 2000);
+        }
+    </script>
+
+</body>
+
+</html>

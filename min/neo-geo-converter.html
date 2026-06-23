@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoConverter Pro (by Rain)</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>">
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/mgrs/dist/mgrs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.10.0/proj4.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-simple-map-screenshoter"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    /* ============ MODERN PROFESSIONAL THEME ============ */
+    :root {
+      --bg: #1e1e1e;
+      /* Глубокий темный фон */
+      --panel: #181b21;
+      /* Фон панелей */
+      --card: #21252d;
+      /* Фон карточек и таблиц */
+      --border: #2e3440;
+      /* Строгие границы */
+      --border-hover: #434c5e;
+
+      /* Акцентные цвета (Индиго / Синий) */
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-dim: rgba(59, 130, 246, 0.15);
+
+      /* Статусные цвета */
+      --success: #10b981;
+      --danger: #ef4444;
+      --danger-dim: rgba(239, 68, 68, 0.15);
+
+      /* Текст */
+      --fg: #f3f4f6;
+      --fg-muted: #9ca3af;
+
+      /* Инпуты */
+      --input-bg: #13151a;
+
+      --radius: 8px;
+      --radius-sm: 6px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ============ LAYOUT ============ */
+    .container {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+      height: 100%;
+      padding: 8px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow);
+    }
+
+    .left-panel {
+      flex: 0 0 440px;
+      padding: 12px;
+      overflow-y: auto;
+      transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .left-panel.collapsed {
+      flex: 0 0 0;
+      padding: 0;
+      border: none;
+      opacity: 0;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .right-panel {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Скроллбары */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover);
+    }
+
+    /* ============ TYPOGRAPHY ============ */
+    h3 {
+      margin: 0 0 12px 0;
+      font-weight: 600;
+      font-size: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #fff;
+    }
+
+    h3 small {
+      font-weight: 400;
+      color: var(--fg-muted);
+      font-size: 12px;
+      padding: 2px 8px;
+      text-shadow: 0 0 2px #00e7ff;
+      cursor: progress;
+    }
+
+    /* ============ SEGMENTED CONTROL ============ */
+    .seg-control {
+      display: flex;
+      background: var(--input-bg);
+      backdrop-filter: blur(4px);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .seg-control input[type="radio"] {
+      display: none;
+    }
+
+    .seg-control label {
+      flex: 1;
+      text-align: center;
+      padding: 8px 12px;
+      border-radius: calc(var(--radius) - 2px);
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--fg-muted);
+      transition: all 0.2s;
+    }
+
+    .seg-control label:hover {
+      color: var(--fg);
+    }
+
+    .seg-control input[type="radio"]:checked+label {
+      background: var(--card);
+      color: #fff;
+      outline: 1px solid var(--border);
+    }
+
+    /* ============ MANUAL DROPDOWN ============ */
+    .manual-dropdown {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      background: var(--card);
+      overflow: hidden;
+    }
+
+    .manual-toggle {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--fg);
+    }
+
+    .manual-toggle:hover {
+      background: var(--border-hover);
+    }
+
+    .manual-toggle .arrow {
+      transition: transform 0.3s;
+      font-size: 10px;
+    }
+
+    .manual-dropdown.open .manual-toggle .arrow {
+      transform: rotate(180deg);
+    }
+
+    .manual-content {
+      max-height: 0;
+      transition: max-height 0.3s ease;
+    }
+
+    .hint-grid {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 3px;
+      padding: 0 16px 16px 16px;
+      align-items: center;
+    }
+
+    .hint-grid label {
+      font-size: 12px;
+      color: var(--fg-muted);
+      font-weight: 500;
+    }
+
+    .example-input {
+      width: 100%;
+      padding: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--fg-muted);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--input-bg);
+      cursor: text;
+    }
+
+    .example-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+    }
+
+    .hint-full-width {
+      grid-column: 1 / -1;
+      padding: 12px;
+      background: var(--accent-dim);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .hint-full-width code {
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ============ TEXTAREA ============ */
+    textarea {
+      width: 100%;
+      font-family: 'JetBrains Mono', monospace;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+      resize: vertical;
+      min-height: 140px;
+      font-size: 13px;
+      background: var(--input-bg);
+      color: var(--fg);
+      line-height: 1.5;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+    }
+
+    /* ============ CONTROLS & BUTTONS ============ */
+    .controls {
+      margin: 12px 0;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .controls-formats {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .controls-row {
+      flex: 1 1 100%;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      font-family: inherit;
+      border: none;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--card);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--border-hover);
+    }
+
+    select,
+    .checkbox-group {
+      background: var(--input-bg);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      height: 34px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    select {
+      padding: 0 28px 0 12px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    select:focus {
+      border-color: var(--accent);
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .checkbox-group:hover {
+      border-color: var(--border-hover);
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    input[type="color"] {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: transparent;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    .marker-color-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 6px;
+      height: 34px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .marker-color-group:hover {
+      border-color: var(--border-hover);
+    }
+
+    .color-presets {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .color-preset {
+      width: 33px;
+      height: 22px;
+      min-width: 33px;
+      padding: 0;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+    }
+
+    .color-preset:hover {
+      filter: brightness(1.12);
+    }
+
+    .color-preset.is-active {
+      border-color: #fff;
+      border-width: 3px;
+      transform: scale(1.08);
+      z-index: 1;
+      box-shadow:
+        0 0 0 2px var(--accent),
+        0 0 10px 3px var(--accent-dim),
+        0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    .color-preset[data-color="#0066ff"] {
+      background: #0066ff;
+    }
+
+    .color-preset[data-color="#ff0000"] {
+      background: #ff0000;
+    }
+
+    .color-preset[data-color="#ffcc00"] {
+      background: #ffcc00;
+    }
+
+    /* ============ TABLE & COPY BUTTONS ============ */
+    .results-wrapper {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .results-table th,
+    .results-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    .results-table th {
+      background: var(--panel);
+      color: var(--fg-muted);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      box-shadow: 0 1px 0 var(--border);
+    }
+
+    .results-table tr:hover td {
+      background: var(--border-hover);
+    }
+
+    .parsed-val {
+      font-weight: 500;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .desc-text {
+      display: block;
+      color: var(--fg-muted);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .code-cell {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      /* Разносит текст и кнопку по краям */
+      gap: 8px;
+    }
+
+    .code-cell .copy-coord {
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .code-cell .copy-coord:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+
+    .error-row td {
+      background: var(--danger-dim) !important;
+      color: var(--danger);
+    }
+
+    /* Кнопки копирования в заголовке */
+    .th-actions {
+      display: flex;
+      gap: 4px;
+      float: right;
+    }
+
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--fg-muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-btn:hover {
+      background: var(--border);
+      color: var(--fg);
+      color: #00ffff;
+      text-shadow: 0 0 5px #00ffff;
+    }
+
+    /* Кнопка копирования с описанием в строке */
+    .row-copy-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 2px 6px;
+      font-size: 10px;
+      transition: all 0.2s;
+    }
+
+    .row-copy-btn:hover {
+      background: var(--border-hover);
+      color: var(--fg);
+      border-color: var(--fg-muted);
+    }
+
+    /* ============ MAP & POPUPS ============ */
+    #map {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--radius);
+      background: #1a1a1a;
+    }
+
+    .float-btn {
+      position: absolute;
+      z-index: 1000;
+      background: var(--panel);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .float-btn:hover {
+      background: var(--border-hover);
+    }
+
+    #toggleSidebarBtn {
+      top: 10px;
+      left: 12px;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #screenshotBtn {
+      top: 10px;
+      left: 64px;
+    }
+
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+      background: var(--card) !important;
+      color: var(--fg) !important;
+      box-shadow: var(--shadow) !important;
+    }
+
+    .leaflet-container a.leaflet-popup-close-button {
+      color: var(--fg-muted) !important;
+      padding: 4px !important;
+    }
+
+    .leaflet-container a.leaflet-popup-close-button:hover {
+      color: var(--fg) !important;
+    }
+
+    .spartan-popup {
+      font-family: 'Inter', sans-serif;
+      min-width: 200px;
+    }
+
+    .p-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      color: #fff;
+    }
+
+    .p-grid {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 6px 12px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .p-label {
+      color: var(--fg-muted);
+    }
+
+    .p-val {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+    }
+
+    .p-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .p-coords {
+      font-size: 11px;
+      color: var(--fg-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .p-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .p-trash {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .p-trash:hover {
+      color: #f87171;
+    }
+
+    .map-label {
+      background: rgba(255, 255, 255, 0.9);
+      /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); */
+
+      /* background: rgba(24, 27, 33, 0.9) !important; */
+      border: 1px solid var(--border) !important;
+      /* color: var(--fg) !important; */
+      border-radius: 4px !important;
+      box-shadow: var(--shadow) !important;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 5px;
+      white-space: nowrap;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* .map-label::before {
+      border-top-color: var(--border) !important;
+    } */
+
+    /* Уголок снизу (когда подпись над маркером) */
+    .map-label.leaflet-tooltip-top::before {
+      border-top-color: rgba(255, 255, 255, 0.95) !important;
+    }
+
+    /* Уголок сверху (если подпись упрется в край экрана и перевернется вниз) */
+    .map-label.leaflet-tooltip-bottom::before {
+      border-bottom-color: rgba(255, 255, 255, 0.95) !important;
+    }
+
+    .hide-labels .leaflet-tooltip {
+      display: none !important;
+    }
+
+    .custom-svg-icon {
+      background: none !important;
+      border: none !important;
+    }
+
+    /* ============ TEXT OUTPUT ============ */
+    #textOutputContainer {
+      display: none;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      background: var(--panel);
+      padding: 12px;
+      flex-direction: column;
+      z-index: 10;
+    }
+
+    #textOutput {
+      flex-grow: 1;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+
+    #copyTextBtn {
+      margin-top: 20px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .status-bar {
+      font-size: 12px;
+      color: var(--fg-muted);
+      margin-left: auto;
+      font-weight: 500;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .leaflet-bottom.leaflet-right .leaflet-control-attribution:has(a[href="https://leafletjs.com"]) {
+      display: none;
+    }
+
+    .leaflet-top.leaflet-left {
+      margin-top: 50px;
+    }
+
+    .leaflet-tile {
+      outline: 1px solid transparent;
+    }
+
+    /* Clean Mode (Screenshot) */
+    body.clean-mode {
+      padding: 0;
+    }
+
+    body.clean-mode .container {
+      padding: 0;
+      gap: 0;
+    }
+
+    body.clean-mode .left-panel {
+      flex: 0 0 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      opacity: 0 !important;
+      pointer-events: none;
+    }
+
+    body.clean-mode .right-panel {
+      flex: 1;
+      border: none;
+      border-radius: 0;
+      height: 100vh;
+    }
+
+    body.clean-mode .leaflet-control-container,
+    body.clean-mode #toggleSidebarBtn,
+    body.clean-mode #screenshotBtn {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <!-- Left Panel: Controls -->
+    <div class="panel left-panel" id="sidebar">
+      <h3>Neo GeoConverter <small>by Rain v3.1</small></h3>
+
+      <!-- Mode switcher -->
+      <div class="seg-control">
+        <input type="radio" name="appMode" id="modeMap" value="map" checked>
+        <label for="modeMap">🗺️ Карта та Таблиця</label>
+
+        <input type="radio" name="appMode" id="modeText" value="text">
+        <label for="modeText">📝 Заміна в тексті</label>
+      </div>
+
+      <div class="manual-dropdown" id="manualDropdown">
+        <button class="manual-toggle">
+          <span><!-- 📚  -->Довідник та приклади</span>
+          <span class="arrow">▼</span>
+        </button>
+
+        <div class="manual-content">
+          <div class="hint-grid">
+            <label>MGRS:</label>
+            <input type="text" class="example-input" value="36T XT 58552 65820" readonly>
+
+            <label>УСК-2000 (X Y):</label>
+            <input type="text" class="example-input" value="5350120 6360120" readonly>
+
+            <label>Равлик:</label>
+            <input type="text" class="example-input" value="x=52 y=73 68025" readonly>
+
+            <label>WGS84 (Lat Lon):</label>
+            <input type="text" class="example-input" value="48.123 37.123" readonly>
+
+            <label>WGS84 (DMS):</label>
+            <input type="text" class="example-input" value="48°05'00&quot;N 37°05'00&quot;E" readonly>
+
+            <div class="hint hint-full-width">
+              • Лінії: Обгорніть точки в <code>[ ... ]</code>
+              <b>Приклад лінії:</b><br>
+              <code>[<br>48.1 37.1 - Точка 1<br>48.2 37.2 - Точка 2<br>]</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <textarea id="input" placeholder="Вставте координати сюди..."></textarea>
+
+      <div class="controls">
+        <div class="controls-formats">
+          <select id="outFormat" title="Формат виводу">
+            <option value="mgrs" selected>MGRS</option>
+            <option value="wgs_dec">WGS84 (DD.dd)</option>
+            <option value="wgs_dms">WGS84 (DMS)</option>
+            <option value="usk2000">УСК-2000</option>
+            <option value="kml">Lon,Lat (KML)</option>
+            <option value="latlon">Lat,Lon (Google)</option>
+          </select>
+
+          <select id="mgrsPrecision" title="Точність MGRS">
+            <option value="2">1 км</option>
+            <option value="3">100 м</option>
+            <option value="4">10 м</option>
+            <option value="5" selected>1 м</option>
+          </select>
+        </div>
+
+        <div class="controls-row">
+          <label class="checkbox-group" title="Показувати назви точок">
+            <input type="checkbox" id="showLabelsCheck" checked> Підписи
+          </label>
+
+          <label class="checkbox-group" title="Не очищати старі точки, а додавати нові">
+            <input type="checkbox" id="appendCheck">
+            <span>Додавати</span>
+          </label>
+
+          <div class="marker-color-group" title="Колір маркерів">
+            <div class="color-presets" role="group" aria-label="Колір маркерів">
+              <button type="button" class="color-preset" data-color="#0066ff" title="Синій" aria-label="Синій"></button>
+              <button type="button" class="color-preset is-active" data-color="#ff0000" title="Червоний" aria-label="Червоний"></button>
+              <button type="button" class="color-preset" data-color="#ffcc00" title="Жовтий" aria-label="Жовтий"></button>
+            </div>
+            <input type="color" id="markerColor" value="#ff0000" title="Довільний колір">
+          </div>
+        </div>
+
+        <span id="status" class="status-bar"></span>
+
+        <div class="controls-row">
+          <button id="convertBtn" class="btn-primary">Розрахувати</button>
+          <button id="clearBtn" class="btn-secondary">Очистити</button>
+        </div>
+      </div>
+
+      <div class="results-wrapper" id="tableWrapper">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th style="width: 50px;">Тип</th>
+              <th>Вхідні дані</th>
+              <th>
+                <span id="resHeader">Результат</span>
+
+                <div class="th-actions">
+                  <button id="copyAllBtn" class="icon-btn" title="Копіювати лише координати">⎘</button>
+
+                  <button id="copyAllWithDescBtn" class="icon-btn" title="Копіювати координати з описом">⧉</button>
+                </div>
+              </th>
+            </tr>
+          </thead>
+
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right Panel: Map -->
+    <div class="panel right-panel">
+
+      <!-- Map container -->
+      <div id="mapContainer" style="width:100%; height:100%; position:absolute; top:0; left:0;">
+        <button id="toggleSidebarBtn" class="float-btn" title="Сховати панель (H)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </button>
+
+        <button id="screenshotBtn" class="float-btn">📷 Скриншот</button>
+
+        <div id="map"></div>
+      </div>
+
+      <!-- Text output container (hidden by default) -->
+      <div id="textOutputContainer">
+        <h3 style="margin-bottom: 10px;">Результат заміни в тексті</h3>
+
+        <textarea id="textOutput" placeholder="Тут з’явиться оброблений текст..."></textarea>
+
+        <button id="copyTextBtn" class="btn-primary" style="margin-top: 10px; padding: 12px;">
+          📋 Скопіювати весь текст
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    /**
+     * CONFIGURATION & CONSTANTS
+     */
+    const CONFIG = {
+      PROJ4: {
+        COMMON: "+proj=tmerc +lat_0=0 +k=1 +y_0=0 +ellps=krass +towgs84=23.92,-141.27,-80.9,0,0.35,0.82,-0.12 +units=m +no_defs",
+        ZONES: [
+          { id: 4, lon: 21, x: 4500000 },
+          { id: 5, lon: 27, x: 5500000 },
+          { id: 6, lon: 33, x: 6500000 },
+          { id: 7, lon: 39, x: 7500000 }
+        ]
+      },
+      LAYERS: {
+        OSM: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        SATELLITE: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        GOOGLE_SAT: 'https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        GOOGLE_MAP: 'https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+        GOOGLE_LABELS: 'https://{s}.google.com/vt/lyrs=h&hl=uk&x={x}&y={y}&z={z}&apistyle=s.t:all|s.e:l|p.v:off,s.t:all|s.e:i|p.v:off,s.t:administrative.country|s.e:l|p.v:on,s.t:administrative.province|s.e:l|p.v:on,s.t:administrative.locality|s.e:l|p.v:on,s.t:road|s.e:l|p.v:on',
+        YANDEX: 'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&v=21.03.15-0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+        TOPO: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        OSM_HOT: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+        CARTO_VOYAGER: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+      },
+      MAP: {
+        CENTER: [49.0, 31.0],
+        ZOOM: 6
+      }
+    };
+    CONFIG.PROJ4.ZONES.forEach(z => {
+      proj4.defs(`USK-ZONE-${z.id}`, `${CONFIG.PROJ4.COMMON} +lon_0=${z.lon} +x_0=${z.x}`);
+    });
+
+    /**
+     * UTILITIES
+     */
+    const Utils = {
+      dmsToDecimal: (deg, min, sec, dir) => {
+        let val = Number(deg) + Number(min) / 60 + Number(sec) / 3600;
+        if (dir === 'S' || dir === 'W') val *= -1;
+        return val;
+      },
+
+      decimalToDms: (dd, isLat) => {
+        const dir = dd < 0 ? (isLat ? 'S' : 'W') : (isLat ? 'N' : 'E');
+        const absDD = Math.abs(dd);
+        const deg = Math.floor(absDD);
+        const minFloat = (absDD - deg) * 60;
+        const min = Math.floor(minFloat);
+        const sec = ((minFloat - min) * 60).toFixed(2);
+        return `${deg}°${min}'${sec}"${dir}`;
+      },
+
+      wgsToUsk: (lat, lon) => {
+        const zone = Math.floor(lon / 6) + 1;
+        if (zone < 4 || zone > 7) return "Вне зоны УСК (4-7)";
+        try {
+          const usk = proj4('WGS84', `USK-ZONE-${zone}`, [lon, lat]);
+          return `${usk[1].toFixed(0)} ${usk[0].toFixed(0)}`;
+        } catch (e) { return "Ошибка проекции"; }
+      },
+
+      copyToClipboard: async (text) => {
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.style.cssText = 'position:fixed;left:-9999px;opacity:0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          textarea.setSelectionRange(0, text.length);
+          const ok = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          return ok;
+        } catch (err) {
+          console.error('Copy failed', err);
+          return false;
+        }
+      },
+
+      createSvgIcon: (color) => {
+        const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" style="filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.4)); display: block;">
+          <path d="M12 0C7.58 0 4 3.58 4 8c0 5.25 8 16 8 16s8-10.75 8-16c0-4.42-3.58-8-8-8z" fill="${color}" stroke="#ffffff" stroke-width="1.5"/>
+          <circle cx="12" cy="8" r="3.5" fill="#ffffff"/>
+        </svg>`;
+        return L.divIcon({
+          className: 'custom-svg-icon',
+          html: svg,
+          iconSize: [25, 25],
+          iconAnchor: [12.5, 25],
+          popupAnchor: [0, -25],
+          tooltipAnchor: [0, -25],
+        });
+      },
+
+      escapeHTML: (str) => {
+        return str ? str.replace(/[&<>'"]/g, tag => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+        }[tag] || tag)) : '';
+      }
+    };
+
+    /**
+     * PARSERS
+     * Strategy pattern for identifying coordinate formats
+     */
+    const Parsers = {
+      // Initialize Proj4 definitions
+      init: () => {
+        // CONFIG.PROJ4.ZONES.forEach(z => {
+        //   proj4.defs(`USK-ZONE-${z.id}`, `${CONFIG.PROJ4.COMMON} +lon_0=${z.lon} +x_0=${z.x}`);
+        // });
+      },
+
+      parse: (line) => {
+        // Extract title if present (Format: "Coords - Title")
+        let coordPart = line;
+        let title = '';
+        const splitMatch = line.match(/^(.*?)\s+[-–—]\s+(.*)$/);
+        if (splitMatch) {
+          coordPart = splitMatch[1];
+          title = splitMatch[2].trim();
+        }
+
+        // Ignore dates
+        if (/\d{1,4}[./-]\d{1,2}[./-]\d{2,4}/.test(coordPart)) return null;
+
+        const cleanLine = coordPart.replace(/[\[\]]/g, '').trim();
+
+        // Try strategies in order
+        return Parsers.strategies.snail(cleanLine, title) ||
+          Parsers.strategies.mgrs(cleanLine, title) ||
+          Parsers.strategies.dms(cleanLine, title) ||
+          Parsers.strategies.numeric(cleanLine, title);
+      },
+
+      strategies: {
+        snail: (text, title) => {
+          // Matches: x=52 y=73 68025
+          const match = text.match(/x\s*[:=]?\s*(\d+)\s+y\s*[:=]?\s*(\d+)[\s\W]+(\d{5})/i);
+          if (!match) return null;
+
+          const [_, baseX, baseY, code] = match;
+          const x_km = parseInt(code.substring(0, 2), 10);
+          const y_km = parseInt(code.substring(2, 4), 10);
+          const sector = parseInt(code.substring(4, 5), 10);
+
+          const fullX = parseInt(baseX, 10) * 100000 + x_km * 1000;
+          const fullY = parseInt(baseY, 10) * 100000 + y_km * 1000;
+
+          // Snail offset logic
+          const step = 1000 / 3;
+          const halfStep = step / 2;
+          const layout = [
+            { n: 1, x: 0, y: 2 }, { n: 2, x: 1, y: 2 }, { n: 3, x: 2, y: 2 },
+            { n: 8, x: 0, y: 1 }, { n: 9, x: 1, y: 1 }, { n: 4, x: 2, y: 1 },
+            { n: 7, x: 0, y: 0 }, { n: 6, x: 1, y: 0 }, { n: 5, x: 2, y: 0 }
+          ];
+          const cell = layout.find(i => i.n === sector);
+
+          let finalN = fullX, finalE = fullY;
+          if (cell) {
+            finalN += (cell.y * step) + halfStep;
+            finalE += (cell.x * step) + halfStep;
+          }
+
+          const zone = Math.floor(finalE / 1000000);
+          if (zone < 4 || zone > 7) return null;
+
+          try {
+            const wgs = proj4(`USK-ZONE-${zone}`, 'WGS84', [finalE, finalN]);
+            return { lat: wgs[1], lon: wgs[0], type: `Улитка (Z${zone})`, title, parsedInput: `x=${baseX} y=${baseY} ${code}` };
+          } catch { return null; }
+        },
+
+        mgrs: (text, title) => {
+          if (/^\d{1,2}\s*[A-Za-z]\s*[A-Za-z]{2}/.test(text)) {
+            try {
+            //   const cyrillicToLatin = {
+            //     'А':'A', 'В':'B', 'С':'C', 'Е':'E', 'Н':'H', 'К':'K', 'М':'M', 'О':'O', 'Р':'P', 'Т':'T', 'Х':'X', 'У':'Y', 'І':'I'
+            //   };
+            //   let clean = text.toUpperCase().replace(/\s+/g, '');
+            //   clean = clean.replace(/[АВССЕНКМОРТХУІ]/g, match => cyrillicToLatin[match] || match);
+
+              const clean = text.replace(/\s+/g, '');
+              const pt = mgrs.toPoint(clean);
+              return { lat: pt[1], lon: pt[0], type: 'MGRS', title, parsedInput: clean };
+            } catch { }
+          }
+          return null;
+        },
+
+        dms: (text, title) => {
+          const regex = /(\d+)[°\s]+(\d+)[′'\s]+(\d+(?:\.\d+)?)[″"]?\s*([NS]|Пн|Пд)\s+(\d+)[°\s]+(\d+)[′'\s]+(\d+(?:\.\d+)?)[″"]?\s*([EWЗС])/i;
+          const m = text.match(regex);
+          if (m) {
+            return {
+              lat: Utils.dmsToDecimal(m[1], m[2], m[3], m[4].toUpperCase()),
+              lon: Utils.dmsToDecimal(m[5], m[6], m[7], m[8].toUpperCase()),
+              type: 'DMS', title, parsedInput: m[0]
+            };
+          }
+          return null;
+        },
+
+        numeric: (text, title) => {
+          // Clean up "X=...", "Lat:..."
+          const clean = text.replace(/[xylatlonLATLON]([:=])?/gi, ' ').replace(/[:,]/g, ' ').trim();
+          const parts = clean.split(/\s+/).map(Number).filter(n => !isNaN(n));
+
+          if (parts.length < 2) return null;
+          const [a, b] = parts;
+
+          // Check USK-2000 (Large numbers)
+          if (Math.abs(a) > 1000000 || Math.abs(b) > 1000000) {
+            // Heuristics for X (Northing ~4.4m-6m) and Y (Easting ~4m-8m with zone prefix)
+            const isN = v => v > 4400000 && v < 6000000;
+            const isE = v => { const s = String(Math.floor(v)); return s.length === 7 && ['4', '5', '6', '7'].includes(s[0]); };
+
+            let N, E;
+            if (isN(a) && isE(b)) { N = a; E = b; }
+            else if (isN(b) && isE(a)) { N = b; E = a; }
+            else if (isE(a) && isN(b)) { E = a; N = b; } // Fallback
+
+            if (N && E) {
+              const zone = parseInt(String(Math.floor(E)).charAt(0), 10);
+              try {
+                const wgs = proj4(`USK-ZONE-${zone}`, 'WGS84', [E, N]);
+                if (wgs[1] > 40 && wgs[1] < 55 && wgs[0] > 20 && wgs[0] < 45) {
+                  return { lat: wgs[1], lon: wgs[0], type: `УСК-2000 (Z${zone})`, title, parsedInput: `X:${N} Y:${E}` };
+                }
+              } catch { }
+            }
+          }
+
+          // Check Lat/Lon
+          if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
+            // Heuristic: Ukraine is roughly Lat 44-52, Lon 22-40
+            if (a >= 40 && a <= 55 && b >= 20 && b <= 45) return { lat: a, lon: b, type: 'Lat Lon', title, parsedInput: `${a}, ${b}` };
+            if (b >= 40 && b <= 55 && a >= 20 && a <= 45) return { lat: b, lon: a, type: 'Lon Lat', title, parsedInput: `${b}, ${a}` };
+          }
+
+          return null;
+        }
+      }
+    };
+
+    /**
+     * TEXT REPLACER
+     * Coordinate search and replacement logic directly inside text
+     */
+    const TextReplacer = {
+      regexes: {
+        // MGRS: supports compact and spaced formats
+        // Example: 36T XT 58552 65820
+        mgrs: /\b\d{1,2}\s*[A-Za-zА-Яа-яІіЇїЄє]\s*[A-Za-zА-Яа-яІіЇїЄє]{2}\s*(?:\d{1,5}\s+\d{1,5}|\d{2,10})\b/gi,
+
+        // DMS: degrees, minutes, seconds
+        dms: /\d{1,3}[°\s]+\d{1,2}[′'\s]+\d{1,2}(?:\.\d+)?[″"]?\s*[NSПнПд]\s*[,;]?\s*\d{1,3}[°\s]+\d{1,2}[′'\s]+\d{1,2}(?:\.\d+)?[″"]?\s*[EWЗС]/gi,
+
+        // Snail coordinates
+        snail: /x\s*[:=]?\s*\d+\s*y\s*[:=]?\s*\d+[\s\W]+\d{5}/gi,
+
+        // Decimal coordinates (1-15 decimal places, including negatives)
+        // or USK-2000 coordinates (6-7 digits)
+        coords: /-?\b\d{1,3}\.\d{1,15}[\s,;]+-?\b\d{1,3}\.\d{1,15}\b|\b\d{6,7}[\s,;]+\d{6,7}\b/g
+      },
+
+      process: (text, targetFormat, precision, appInstance) => {
+        let resultText = text;
+        const tableData = [];
+
+        const replaceIfValid = (match, strategyName) => {
+          try {
+            const parsed = Parsers.strategies[strategyName](match, '');
+            if (parsed) {
+              const formatted = appInstance.formatOutput(parsed.lat, parsed.lon, targetFormat, precision, strategyName, match);
+              tableData.push({ type: parsed.type || strategyName, original: match, formatted: formatted });
+              return formatted;
+            }
+          } catch (e) { console.warn("Помилка заміни:", e); }
+          return match;
+        };
+
+        resultText = resultText.replace(TextReplacer.regexes.mgrs, m => replaceIfValid(m, 'mgrs'))
+          .replace(TextReplacer.regexes.dms, m => replaceIfValid(m, 'dms'))
+          .replace(TextReplacer.regexes.snail, m => replaceIfValid(m, 'snail'))
+          .replace(TextReplacer.regexes.coords, m => replaceIfValid(m, 'numeric'));
+
+        return { resultText, tableData };
+      }
+    };
+
+    /**
+     * MAP MANAGER
+     * Handles Leaflet instance
+     */
+    class MapManager {
+      constructor(containerId) {
+        this.map = L.map(containerId, {
+          center: CONFIG.MAP.CENTER,
+          zoom: CONFIG.MAP.ZOOM,
+          preferCanvas: true,
+          zoomSnap: 0.25,
+          zoomDelta: 0.25,
+          wheelDebounceTime: 40,
+          zoomAnimation: true,
+          markerZoomAnimation: true,
+          fadeAnimation: true
+        });
+
+        this.markersLayer = L.layerGroup().addTo(this.map);
+        this.screenshoter = L.simpleMapScreenshoter({ hidden: true, mimeType: 'image/png' }).addTo(this.map);
+        L.control.scale({
+          position: 'topright', // bottomleft | bottomright | topleft | topright
+          metric: true,
+          imperial: false,
+          maxWidth: 150
+        }).addTo(this.map);
+
+        this.initLayers();
+      }
+
+      initLayers() {
+        const layers = {
+          "🛰 Esri Спутник": L.tileLayer(CONFIG.LAYERS.SATELLITE, { maxZoom: 18, attribution: 'Esri' }),
+          "🛰 Google Спутник": L.tileLayer(CONFIG.LAYERS.GOOGLE_SAT, { subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], maxZoom: 20 }),
+          "🗺 Google Карта": L.tileLayer(CONFIG.LAYERS.GOOGLE_MAP, { subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], maxZoom: 20 }),
+          "🗺 OpenStreetMap": L.tileLayer(CONFIG.LAYERS.OSM, { maxZoom: 19 }),
+          "🧭 Yandex": L.tileLayer(CONFIG.LAYERS.YANDEX, { maxZoom: 19, attribution: 'Yandex' }),
+          "⛰ OpenTopoMap": L.tileLayer(CONFIG.LAYERS.TOPO, { maxZoom: 17, attribution: 'OpenTopoMap' }),
+          "🌍 OSM HOT": L.tileLayer(CONFIG.LAYERS.OSM_HOT, { maxZoom: 19, attribution: 'OSM HOT' }),
+          "🪖 Carto Voyager": L.tileLayer(CONFIG.LAYERS.CARTO_VOYAGER, { maxZoom: 19, attribution: 'CartoDB' }),
+          "🌙 Темная": L.tileLayer(CONFIG.LAYERS.DARK, { maxZoom: 19, attribution: 'CartoDB' })
+        };
+
+        const overlays = {
+          "🏷️ Названия (Google)": L.tileLayer(CONFIG.LAYERS.GOOGLE_LABELS, { subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], maxZoom: 20, zIndex: 500 })
+        };
+
+        // Default layers
+        layers["🛰 Google Спутник"].addTo(this.map);
+        overlays["🏷️ Названия (Google)"].addTo(this.map);
+
+        L.control.layers(layers, overlays).addTo(this.map);
+      }
+
+      clear() {
+        this.markersLayer.clearLayers();
+      }
+
+      addMarker({ lat, lon, title, resultStr, parsedInput, inputType, icon, initialColor, onDelete }) {
+        const marker = L.marker([lat, lon], { icon });
+
+        const popupDiv = document.createElement('div');
+        popupDiv.className = 'spartan-popup';
+
+        popupDiv.innerHTML = `
+          <div class="p-title">${Utils.escapeHTML(title) || 'Точка'}</div>
+
+          <div class="p-grid">
+            <span class="p-label">${Utils.escapeHTML(inputType)}:</span>
+            <span class="p-val">${Utils.escapeHTML(parsedInput)}</span>
+
+            <span class="p-label">вывод:</span>
+            <span class="p-val" style="font-weight: bold;">${Utils.escapeHTML(resultStr)}</span>
+          </div>
+
+          <div class="p-footer">
+            <span class="p-coords">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>
+
+            <div class="p-actions">
+              <svg class="p-trash" title="Удалить точку" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+
+              <input type="color" class="p-color" value="${initialColor}" title="Цвет маркера">
+            </div>
+          </div>
+        `;
+
+        const colorPicker = popupDiv.querySelector('.p-color');
+        colorPicker.addEventListener('input', (e) => {
+          const newColor = e.target.value;
+          const newIcon = Utils.createSvgIcon(newColor);
+          marker.setIcon(newIcon);
+        });
+
+        const trashBtn = popupDiv.querySelector('.p-trash');
+        trashBtn.addEventListener('click', () => {
+          this.markersLayer.removeLayer(marker);
+          if (onDelete) onDelete();
+        });
+
+        marker.bindPopup(popupDiv);
+
+        if (title) {
+          marker.bindTooltip(Utils.escapeHTML(title), {
+            permanent: true,
+            direction: 'top',
+            className: 'map-label',
+            offset: [0, -2] // 0 on X (strict center), -2 on Y (slightly above the marker)
+          });
+        }
+
+        this.markersLayer.addLayer(marker);
+      }
+
+      addPolyline(points, color, weight = 6) {
+        if (points.length > 1) {
+          L.polyline(points, { color, weight, opacity: 0.8 }).addTo(this.markersLayer);
+        }
+      }
+
+      fitBounds(bounds) {
+        if (bounds.length > 0) {
+          this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+        }
+      }
+
+      invalidate() {
+        this.map.invalidateSize();
+      }
+
+      async takeScreenshot() {
+        return await this.screenshoter.takeScreen('blob');
+      }
+    }
+
+    /**
+     * BATCH PROCESSOR
+     * Handles non-blocking processing of large lists
+     */
+    class BatchProcessor {
+      constructor(onBatchComplete, onFinish) {
+        this.timer = null;
+        this.isRunning = false;
+        this.onBatchComplete = onBatchComplete;
+        this.onFinish = onFinish;
+        this.CHUNK_SIZE = 200;
+      }
+
+      start(items, processFn, context) {
+        this.stop();
+        this.isRunning = true;
+        let index = 0;
+
+        const nextBatch = () => {
+          if (!this.isRunning) return;
+
+          const end = Math.min(index + this.CHUNK_SIZE, items.length);
+          const batchResults = [];
+
+          for (let i = index; i < end; i++) {
+            batchResults.push(processFn(items[i], i));
+          }
+
+          this.onBatchComplete(batchResults, end, items.length, context);
+          index = end;
+
+          if (index < items.length) {
+            this.timer = setTimeout(nextBatch, 0);
+          } else {
+            this.isRunning = false;
+            this.onFinish(context);
+          }
+        };
+
+        nextBatch();
+      }
+
+      stop() {
+        this.isRunning = false;
+        clearTimeout(this.timer);
+      }
+    }
+
+    /**
+     * UI MANAGER
+     * Main Application Logic
+     */
+    class App {
+      constructor() {
+        Parsers.init();
+        this.mapManager = new MapManager('map');
+        this.processor = new BatchProcessor(this.renderBatch.bind(this), this.onProcessFinish.bind(this));
+
+        this.els = {
+          input: document.getElementById('input'),
+          tbody: document.getElementById('resultsBody'),
+          status: document.getElementById('status'),
+          convertBtn: document.getElementById('convertBtn'),
+          clearBtn: document.getElementById('clearBtn'),
+          format: document.getElementById('outFormat'),
+          precision: document.getElementById('mgrsPrecision'),
+          color: document.getElementById('markerColor'),
+          labelsCheck: document.getElementById('showLabelsCheck'),
+          sidebar: document.getElementById('sidebar'),
+          toggleBtn: document.getElementById('toggleSidebarBtn'),
+          screenshotBtn: document.getElementById('screenshotBtn'),
+          resHeader: document.getElementById('resHeader')
+        };
+
+        this.state = {
+          bounds: [],
+          currentPolyline: [],
+          isPathMode: false
+        };
+
+        this.bindEvents();
+      }
+
+      syncColorPresets() {
+        const current = this.els.color.value.toLowerCase();
+        this.els.colorPresets.forEach((btn) => {
+          btn.classList.toggle('is-active', btn.dataset.color.toLowerCase() === current);
+        });
+      }
+
+      bindEvents() {
+        this.els.convertBtn.addEventListener('click', () => this.run());
+        this.els.clearBtn.addEventListener('click', () => this.reset());
+
+        this.els.appendCheck = document.getElementById('appendCheck');
+        this.els.appendCheck.addEventListener('change', (e) => {
+          this.els.convertBtn.innerText = e.target.checked ? 'Додати' : 'Розрахувати';
+        });
+
+        this.els.format.addEventListener('change', () => {
+          const isMgrs = this.els.format.value === 'mgrs';
+          this.els.precision.classList.toggle('hidden', !isMgrs);
+          this.els.resHeader.innerText = this.els.format.options[this.els.format.selectedIndex].text;
+        });
+
+        this.els.labelsCheck.addEventListener('change', (e) => {
+          document.getElementById('map').classList.toggle('hide-labels', !e.target.checked);
+        });
+
+        // this.els.color.addEventListener('input', () => this.run()); // Auto-rerun on color change
+
+        this.els.colorPresets = document.querySelectorAll('.color-preset');
+        this.els.colorPresets.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            this.els.color.value = btn.dataset.color;
+            this.syncColorPresets();
+          });
+        });
+        this.els.color.addEventListener('input', () => this.syncColorPresets());
+        this.syncColorPresets();
+
+        this.els.toggleBtn.addEventListener('click', () => {
+          this.els.sidebar.classList.toggle('collapsed');
+          this.els.screenshotBtn.classList.toggle('hidden');
+          setTimeout(() => this.mapManager.invalidate(), 300);
+        });
+
+        this.els.screenshotBtn.addEventListener('click', () => this.handleScreenshot());
+
+        document.getElementById('copyAllBtn').addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          const texts = Array.from(document.querySelectorAll('.code-cell')).map(el => el.getAttribute('data-coord')).join('\n');
+          if (texts) {
+            if (await Utils.copyToClipboard(texts)) {
+              const originalText = btn.innerText;
+              btn.innerText = '✅';
+              setTimeout(() => btn.innerText = originalText, 1500);
+            }
+          }
+        });
+
+        this.els.tbody.addEventListener('click', async (e) => {          
+          const target = e.target;
+          const cell = target.closest('.code-cell');
+          if (!cell) return;
+
+          let textToCopy = '';
+
+          // Кликнули по самим координатам
+          if (target.classList.contains('copy-coord')) {            
+            textToCopy = cell.getAttribute('data-coord');            
+          }
+          // Кликнули по кнопке "с описанием"
+          else if (target.closest('.copy-desc')) {
+            textToCopy = `${cell.getAttribute('data-coord')} - ${cell.getAttribute('data-title')}`;
+          }
+
+          if (textToCopy) {
+            if (await Utils.copyToClipboard(textToCopy)) {
+              // Визуальный отклик
+              if (target.tagName === 'BUTTON') {
+                const orig = target.innerText;
+                target.innerText = '✅';
+                target.style.borderColor = 'var(--success)';
+                setTimeout(() => { target.innerText = orig; target.style.borderColor = ''; }, 1000);
+              } else {
+                const origColor = target.style.color;
+                target.style.color = 'var(--success)';
+                setTimeout(() => target.style.color = origColor, 1000);
+              }
+            }
+          }
+        });
+
+        document.getElementById('copyAllWithDescBtn').addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          const rows = Array.from(document.querySelectorAll('#resultsBody tr:not(.error-row)'));
+          const texts = rows.map(tr => {
+            const codeEl = tr.querySelector('.code-cell');
+            if (!codeEl) return null;
+
+            const coord = codeEl.getAttribute('data-coord');
+            const desc = codeEl.getAttribute('data-title');
+
+            return desc ? `${coord} - ${desc}` : coord;
+          }).filter(t => t !== null).join('\n');
+
+          if (texts) {
+            if (await Utils.copyToClipboard(texts)) {
+              const originalText = btn.innerText;
+              btn.innerText = '✅';
+              setTimeout(() => btn.innerText = originalText, 1500);
+            }
+          }
+        });
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+          if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+          if (e.code === 'KeyH') this.toggleCleanMode();
+        });
+
+        // --- Switch ---
+        const modeRadios = document.querySelectorAll('input[name="appMode"]');
+        const mapContainer = document.getElementById('mapContainer');
+        const textOutputContainer = document.getElementById('textOutputContainer');
+        const copyTextBtn = document.getElementById('copyTextBtn');
+        const textOutput = document.getElementById('textOutput');
+
+        modeRadios.forEach(radio => {
+          radio.addEventListener('change', (e) => {
+            const isTextMode = e.target.value === 'text';
+
+            // Toggle visibility of blocks
+            mapContainer.style.display = isTextMode ? 'none' : 'block';
+            textOutputContainer.style.display = isTextMode ? 'flex' : 'none';
+
+            // Refresh map size after returning to map mode
+            if (!isTextMode) {
+              setTimeout(() => this.mapManager.invalidate(), 100);
+            }
+          });
+        });
+
+        // Text copy button
+        if (copyTextBtn) {
+          copyTextBtn.addEventListener('click', async () => {
+            if (await Utils.copyToClipboard(textOutput.value)) {
+              const originalText = copyTextBtn.innerText;
+
+              copyTextBtn.innerText = '✅ Скопійовано!';
+              copyTextBtn.style.background = 'var(--success)';
+
+              setTimeout(() => {
+                copyTextBtn.innerText = originalText;
+                copyTextBtn.style.background = '';
+              }, 2000);
+            }
+          });
+        }
+      }
+
+      reset() {
+        this.processor.stop();
+        // this.els.input.value = ''; // Optional: clear input
+        this.els.tbody.innerHTML = '';
+        this.els.status.innerText = '';
+        this.mapManager.clear();
+        this.state.bounds = [];
+        this.els.convertBtn.disabled = false;
+      }
+
+      run() {
+        const text = this.els.input.value.trim();
+        if (!text) return;
+
+        // Check current mode
+        // If radio buttons are missing, fallback to map mode
+        const modeElement = document.querySelector('input[name="appMode"]:checked');
+        const mode = modeElement ? modeElement.value : 'map';
+
+        if (mode === 'text') {
+          this.els.status.innerText = 'Обробка тексту...';
+
+          const format = this.els.format.value;
+          const precision = Number(this.els.precision.value);
+
+          // Get processed text and table data
+          const { resultText, tableData } = TextReplacer.process(
+            text,
+            format,
+            precision,
+            this
+          );
+
+          document.getElementById('textOutput').value = resultText;
+
+          // Clear results table and render report
+          this.els.tbody.innerHTML = '';
+
+          const fragment = document.createDocumentFragment();
+
+          tableData.forEach(item => {
+            const tr = document.createElement('tr');
+
+            tr.innerHTML = `
+              <td><small>${item.type}</small></td>
+
+              <td>
+                <span class="parsed-val">
+                  ${Utils.escapeHTML(item.original)}
+                </span>
+              </td>
+
+              <td class="code-cell" data-coord="${Utils.escapeHTML(item.formatted)}">
+                <span
+                  onclick="Utils.copyToClipboard(this.parentElement.getAttribute('data-coord'))"
+                  style="cursor:pointer;"
+                  title="Копіювати"
+                >
+                  ${Utils.escapeHTML(item.formatted)}
+                </span>
+              </td>
+            `;
+
+            fragment.appendChild(tr);
+          });
+
+          this.els.tbody.appendChild(fragment);
+
+          this.els.status.innerText = `Готово (замін: ${tableData.length})`;
+
+          return;
+        }
+
+        // If map mode is active — run classic BatchProcessor
+        const isAppendMode = this.els.appendCheck.checked;
+        if (!isAppendMode) {
+          this.els.tbody.innerHTML = '';
+          this.mapManager.clear();
+          this.state.bounds = [];
+        }
+        this.state.currentPolyline = [];
+        this.state.isPathMode = false;
+        this.els.convertBtn.disabled = true;
+        const batchColor = this.els.color.value;
+        const lines = text.split(/\r?\n|;/);
+        this.processor.start(lines, this.processLine.bind(this), { color: batchColor });
+      }
+
+      processLine(line) {
+        if (!line.trim()) return null;
+
+        // Path logic
+        if (line.includes('[')) this.state.isPathMode = true;
+        const closePath = line.includes(']');
+
+        const coord = Parsers.parse(line);
+        const result = { coord, line, closePath, isPathMode: this.state.isPathMode };
+
+        if (closePath) this.state.isPathMode = false;
+        return result;
+      }
+
+      renderBatch(results, processedCount, totalCount, context) {
+        const fragment = document.createDocumentFragment();
+        const format = this.els.format.value;
+        const precision = Number(this.els.precision.value);
+        const color = context.color;
+        const icon = Utils.createSvgIcon(color);
+
+        results.forEach(item => {
+          if (!item) return;
+          const { coord, line, closePath, isPathMode } = item;
+
+          const tr = document.createElement('tr');
+
+          if (!coord) {
+            if (line.trim() !== '[' && line.trim() !== ']') {
+              tr.className = 'error-row';
+              tr.innerHTML = `<td>Err</td><td>${line.substring(0, 20)}</td><td>Неверный формат</td>`;
+              fragment.appendChild(tr);
+            }
+          } else {
+            // Valid Coordinate
+            const { lat, lon, type, title, parsedInput } = coord;
+
+            // Validate Bounds
+            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+              tr.className = 'error-row';
+              tr.innerHTML = `<td>Err</td><td>${parsedInput}</td><td>Вне диапазона</td>`;
+              fragment.appendChild(tr);
+              return;
+            }
+
+            // Format Output
+            let resultStr = this.formatOutput(lat, lon, format, precision, type, parsedInput);
+
+            const safeResult = Utils.escapeHTML(resultStr);
+            const safeTitle = title ? Utils.escapeHTML(title) : '';
+
+            tr.innerHTML = `
+              <td><small>${type}</small></td>
+              <td><span class="parsed-val">${parsedInput}</span>${title ? `<span class="desc-text">${safeTitle}</span>` : ''}</td>
+              <td class="code-cell" data-coord="${safeResult}" ${title ? `data-title="${safeTitle}"` : ''}>
+                <span class="copy-coord" title="Копировать координаты">${safeResult}</span>
+                ${title ? `<button class="copy-desc row-copy-btn" title="Копировать с описанием">📝</button>` : ''}
+              </td>
+            `;
+            fragment.appendChild(tr);
+
+            // Map Actions
+            const handleDelete = () => {
+              tr.remove();
+            };
+
+            this.mapManager.addMarker({
+              lat: lat,
+              lon: lon,
+              title: title,
+              resultStr: resultStr,
+              parsedInput: parsedInput,
+              inputType: type,
+              icon: icon,
+              initialColor: color,
+              onDelete: handleDelete
+            });
+
+            // const marker = L.circleMarker([lat, lon], {
+            //   radius: 6,
+            //   fillColor: color,
+            //   color: "#ffffff",
+            //   weight: 1.5,
+            //   opacity: 1,
+            //   fillOpacity: 0.9
+            // });
+
+            this.state.bounds.push([lat, lon]);
+
+            if (isPathMode) this.state.currentPolyline.push([lat, lon]);
+          }
+
+          // Handle Polyline Closing
+          if (closePath) {
+            this.mapManager.addPolyline(this.state.currentPolyline, color);
+            this.state.currentPolyline = [];
+          }
+        });
+
+        this.els.tbody.appendChild(fragment);
+        const percent = Math.round((processedCount / totalCount) * 100);
+        this.els.status.innerText = `Обработка: ${percent}%`;
+      }
+
+      onProcessFinish() {
+        this.els.convertBtn.disabled = false;
+        this.els.status.innerText = 'Готово';
+
+        setTimeout(() => {
+          if (this.els.status.innerText === 'Готово') {
+            this.els.status.innerText = '';
+          }
+        }, 300);
+
+        // Draw any remaining polyline
+        if (this.state.currentPolyline.length > 1) {
+          this.mapManager.addPolyline(this.state.currentPolyline, this.els.color.value);
+        }
+
+        this.mapManager.fitBounds(this.state.bounds);
+      }
+
+      formatOutput(lat, lon, format, precision, inputType, inputStr) {
+        try {
+          if (format === 'mgrs') {
+            const m = inputStr.match(/^(\d{1,2}[C-X])([A-Z]{2})(\d+)$/i);
+            if (m) {
+              const h = m[3].length / 2;
+              return `${m[1]} ${m[2]} ${m[3].substring(0, h)} ${m[3].substring(h)}`;
+            }
+
+            const raw = mgrs.forward([lon, lat], precision);
+            const match = raw.match(/^(\d{1,2}[A-Z])([A-Z]{2})(\d+)$/i);
+            if (match) {
+              const coords = match[3];
+              const half = coords.length / 2;
+              return `${match[1]} ${match[2]} ${coords.substring(0, half)} ${coords.substring(half)}`;
+            }
+            return raw;
+          }
+          if (format === 'wgs_dec') return `${lat.toFixed(6)} ${lon.toFixed(6)}`;
+          if (format === 'wgs_dms') return `${Utils.decimalToDms(lat, true)} ${Utils.decimalToDms(lon, false)}`;
+          if (format === 'usk2000') return Utils.wgsToUsk(lat, lon);
+          if (format === 'kml') return `${lon.toFixed(6)},${lat.toFixed(6)}`;
+          if (format === 'latlon') return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        } catch (e) { return "Ошибка"; }
+        return "";
+      }
+
+      toggleCleanMode() {
+        document.body.classList.toggle('clean-mode');
+        setTimeout(() => this.mapManager.invalidate(), 300);
+      }
+
+      async handleScreenshot() {
+        const btn = this.els.screenshotBtn;
+        const originalText = btn.innerHTML;
+        const wasClean = document.body.classList.contains('clean-mode');
+
+        if (!wasClean) this.toggleCleanMode();
+        btn.innerText = '📸 ...';
+        btn.disabled = true;
+
+        await new Promise(r => setTimeout(r, 1500)); // Wait for render
+
+        try {
+          const makeImagePromise = this.mapManager.takeScreenshot();
+          const blob = await this.mapManager.takeScreenshot();
+          const item = new ClipboardItem({
+            'image/png': makeImagePromise
+          });
+
+          await navigator.clipboard.write([item]);
+
+          btn.innerText = '✅ Скопійовано!';
+          btn.style.background = 'var(--success)';
+          btn.style.color = 'white';
+        } catch (e) {
+          alert('Помилка копіювання (потрібен HTTPS). Використовуйте Win+Shift+S.');
+          btn.innerText = '❌ Помилка';
+        } finally {
+          if (!wasClean) this.toggleCleanMode();
+          setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.disabled = false;
+          }, 2000);
+        }
+      }
+
+      async copyCell(element, text) {
+        const success = await Utils.copyToClipboard(text);
+
+        if (success) {
+          const originalBg = element.style.backgroundColor;
+
+          element.style.backgroundColor = '#d1e7dd'; // Green success background
+          element.innerText = 'Скопійовано!';
+
+          setTimeout(() => {
+            element.style.backgroundColor = originalBg;
+            element.innerText = text;
+          }, 800);
+        }
+      }
+    }
+
+    // Initialize
+    const app = new App();
+
+    // Dropdown logic
+    const dropdown = document.getElementById('manualDropdown');
+    const toggleBtn = dropdown.querySelector('.manual-toggle');
+    const content = dropdown.querySelector('.manual-content');
+
+    toggleBtn.addEventListener('click', () => {
+      const isOpen = dropdown.classList.contains('open');
+
+      if (isOpen) {
+        // Close dropdown
+        content.style.maxHeight = null;
+        dropdown.classList.remove('open');
+      } else {
+        // Open dropdown (calculate real content height)
+        dropdown.classList.add('open');
+        content.style.maxHeight = content.scrollHeight + "px";
+      }
+    });
+
+    document.querySelectorAll('.example-input').forEach(input => {
+      input.addEventListener('focus', function () {
+        this.select();
+      });
+
+      input.addEventListener('click', function (e) {
+        if (this === document.activeElement) {
+          this.select();
+        }
+      });
+    });
+
+  </script>
+</body>
+
+</html>

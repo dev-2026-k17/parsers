@@ -27,7 +27,7 @@
             display: flex;
             gap: 20px;
             width: 100%;
-            max-width: 1200px;
+            max-width: 1800px;
         }
 
         .box {
@@ -96,13 +96,20 @@
             <label>Результат:</label>
             <textarea id="outputData"></textarea>
         </div>
+        <div class="box">
+            <label>Координати MGRS:</label>
+            <textarea id="outputMgrs"></textarea>
+        </div>
     </div>
 
     <div class="controls">
         <button onclick="processData()">Обробити текст</button>
-        <button class="btn-copy" onclick="copyResult()">Скопіювати</button>
+        <button class="btn-copy" onclick="copyResult(this)">Скопіювати</button>
+        <button class="btn-copy" onclick="copyMgrsCoords(this)">Координати MGRS</button>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.10.0/proj4.js"></script>
+    <script src="https://unpkg.com/mgrs/dist/mgrs.min.js"></script>
     <script>
         // Список сигнатур мін
         const SIGNATURES = ['ПТМР', 'ПТРМ', 'ПТМ', 'ПОМ', 'ОЗМ', 'ВОГ', 'ДЖ', 'ТМ', 'УК', 'ПМН', 'МОН', 'ПФМ', 'РПГ', 'ПГ'];
@@ -255,6 +262,102 @@
             return mine;
         }
 
+        // MGRS / УСК-2000 — та сама логіка, що в neo-geo-converter.html
+        const MGRS_PRECISION = 5; // 1 м (5 цифр на easting і northing)
+
+        const USK_PROJ4 = {
+            COMMON: '+proj=tmerc +lat_0=0 +k=1 +y_0=0 +ellps=krass +towgs84=23.92,-141.27,-80.9,0,0.35,0.82,-0.12 +units=m +no_defs',
+            ZONES: [
+                { id: 4, lon: 21, x: 4500000 },
+                { id: 5, lon: 27, x: 5500000 },
+                { id: 6, lon: 33, x: 6500000 },
+                { id: 7, lon: 39, x: 7500000 }
+            ]
+        };
+
+        USK_PROJ4.ZONES.forEach(z => {
+            proj4.defs(`USK-ZONE-${z.id}`, `${USK_PROJ4.COMMON} +lon_0=${z.lon} +x_0=${z.x}`);
+        });
+
+        function resolveUskPair(a, b) {
+            const isN = v => v > 4400000 && v < 6000000;
+            const isE = v => {
+                const s = String(Math.floor(v));
+                return s.length === 7 && ['4', '5', '6', '7'].includes(s[0]);
+            };
+
+            let N, E;
+            if (isN(a) && isE(b)) { N = a; E = b; }
+            else if (isN(b) && isE(a)) { N = b; E = a; }
+            else if (isE(a) && isN(b)) { E = a; N = b; }
+            else return null;
+
+            return { N, E };
+        }
+
+        function usk2000ToWgs84(N, E) {
+            const zone = parseInt(String(Math.floor(E)).charAt(0), 10);
+            if (zone < 4 || zone > 7) return null;
+
+            try {
+                const wgs = proj4(`USK-ZONE-${zone}`, 'WGS84', [E, N]);
+                return { lat: wgs[1], lon: wgs[0] };
+            } catch {
+                return null;
+            }
+        }
+
+        function latLonToMgrs(lat, lon, precision = MGRS_PRECISION) {
+            const raw = mgrs.forward([lon, lat], precision);
+            const match = raw.match(/^(\d{1,2}[A-Z])([A-Z]{2})(\d+)$/i);
+            if (match) {
+                const coords = match[3];
+                const half = coords.length / 2;
+                return `${match[1]} ${match[2]} ${coords.substring(0, half)} ${coords.substring(half)}`;
+            }
+            return raw;
+        }
+
+        function coordsToMgrs(coordsStr) {
+            const parts = coordsStr.split(/\s+/).map(Number).filter(n => !isNaN(n));
+            if (parts.length < 2) return coordsStr;
+
+            const pair = resolveUskPair(parts[0], parts[1]);
+            if (!pair) return coordsStr;
+
+            const wgs = usk2000ToWgs84(pair.N, pair.E);
+            if (!wgs) return coordsStr;
+
+            try {
+                return latLonToMgrs(wgs.lat, wgs.lon, MGRS_PRECISION);
+            } catch {
+                return coordsStr;
+            }
+        }
+
+        function buildOutput(aggregated, formatCoords) {
+            const categories = [
+                { key: '✅', title: 'Вдало ✅:' },
+                { key: '❌', title: 'Невдало ❌:' },
+                { key: '❓', title: 'Без статусу ❓:' }
+            ];
+            let output = '';
+            for (const cat of categories) {
+                const map = aggregated.get(cat.key);
+                if (map && map.size > 0) {
+                    output += cat.title + '\n';
+                    for (const [coords, data] of map.entries()) {
+                        const displayCoords = formatCoords(coords);
+                        const minesStr = Array.from(data.mines).join(' + ');
+                        const countStr = data.count > 1 ? ` (${data.count} шт)` : '';
+                        output += `${displayCoords} - ${minesStr}${countStr}\n`;
+                    }
+                    output += '\n';
+                }
+            }
+            return output.trim();
+        }
+
         function processData() {
             const rawText = document.getElementById('inputData').value;
             
@@ -285,6 +388,7 @@
             // 3. АГРЕГАЦІЯ
             const aggregated = new Map([['✅', new Map()], ['❌', new Map()], ['❓', new Map()]]);
             for (const record of records) {
+                if (record.status === '❓') continue;
                 const statusMap = aggregated.get(record.status);
                 if (!statusMap.has(record.coords)) {
                     statusMap.set(record.coords, { count: 0, mines: new Set() });
@@ -294,37 +398,44 @@
                 entry.mines.add(record.mine);
             }
 
-            // 4. ВИВІД
-            let output = '';
-            const categories = [
-                { key: '✅', title: 'Вдало ✅:' },
-                { key: '❌', title: 'Невдало ❌:' },
-                { key: '❓', title: 'Без статусу ❓:' }
-            ];
-
-            for (const cat of categories) {
-                const map = aggregated.get(cat.key);
-                if (map && map.size > 0) {
-                    output += cat.title + '\n';
-                    for (const [coords, data] of map.entries()) {
-                        const minesStr = Array.from(data.mines).join(' + ');
-                        const countStr = data.count > 1 ? ` (${data.count} шт)` : '';
-                        output += `${coords} - ${minesStr}${countStr}\n`;
-                    }
-                    output += '\n';
+            const knownCoords = new Set([
+                ...aggregated.get('✅').keys(),
+                ...aggregated.get('❌').keys()
+            ]);
+            for (const record of records) {
+                if (record.status !== '❓' || knownCoords.has(record.coords)) continue;
+                const statusMap = aggregated.get('❓');
+                if (!statusMap.has(record.coords)) {
+                    statusMap.set(record.coords, { count: 0, mines: new Set() });
                 }
+                const entry = statusMap.get(record.coords);
+                entry.count += 1;
+                entry.mines.add(record.mine);
             }
-            document.getElementById('outputData').value = output.trim() || 'Дані не знайдені.';
+
+            // 4. ВИВІД
+            const output = buildOutput(aggregated, coords => coords);
+            const mgrsOutput = buildOutput(aggregated, coordsToMgrs);
+            const emptyMsg = 'Дані не знайдені.';
+            document.getElementById('outputData').value = output || emptyMsg;
+            document.getElementById('outputMgrs').value = mgrsOutput || emptyMsg;
         }
 
-        function copyResult() {
-            const output = document.getElementById('outputData');
+        function copyTextarea(textareaId, btn, successText) {
+            const output = document.getElementById(textareaId);
             output.select();
             document.execCommand('copy');
-            const btn = document.querySelector('.btn-copy');
             const originalText = btn.innerText;
-            btn.innerText = 'Скопійовано!';
+            btn.innerText = successText;
             setTimeout(() => btn.innerText = originalText, 2000);
+        }
+
+        function copyResult(btn) {
+            copyTextarea('outputData', btn, 'Скопійовано!');
+        }
+
+        function copyMgrsCoords(btn) {
+            copyTextarea('outputMgrs', btn, 'Скопійовано!');
         }
     </script>
 

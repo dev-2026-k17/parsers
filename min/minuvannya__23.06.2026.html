@@ -358,6 +358,10 @@
             return output.trim();
         }
 
+        function normalizeMgrsUnits(text) {
+            return text.replace(/(?<![а-яіїєґА-ЯІЇЄҐa-zA-Z])(штук|шп\.|шт)(?![а-яіїєґА-ЯІЇЄҐa-zA-Z])/gi, 'од.');
+        }
+
         function processData() {
             const rawText = document.getElementById('inputData').value;
             
@@ -376,8 +380,11 @@
 
                 // Витягуємо статус
                 let status = '❓';
-                if (p.includes('✅')) status = '✅';
-                else if (p.includes('❌')) status = '❌';
+                const hasSuccess = p.includes('✅');
+                const hasFail = p.includes('❌');
+                if (hasSuccess && hasFail) status = '❌';
+                else if (hasSuccess) status = '✅';
+                else if (hasFail) status = '❌';
 
                 // Витягуємо міну
                 const mine = extractPayload(p);
@@ -418,7 +425,7 @@
             const mgrsOutput = buildOutput(aggregated, coordsToMgrs);
             const emptyMsg = 'Дані не знайдені.';
             document.getElementById('outputData').value = output || emptyMsg;
-            document.getElementById('outputMgrs').value = mgrsOutput || emptyMsg;
+            document.getElementById('outputMgrs').value = mgrsOutput ? normalizeMgrsUnits(mgrsOutput) : emptyMsg;
         }
 
         function copyTextarea(textareaId, btn, successText) {

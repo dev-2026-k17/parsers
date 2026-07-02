@@ -4,109 +4,485 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Парсер мін (by Rain)</title>
+    <title>Парсер мін</title>
+    <script>
+        (() => {
+            const savedTheme = localStorage.getItem('mines-parser-theme');
+            document.documentElement.dataset.theme = savedTheme || 'dark';
+        })();
+    </script>
     <style>
+        :root {
+            color-scheme: dark;
+            --bg: #1e1e1e;
+            --page-surface: #181b21;
+            --surface: #21252d;
+            --surface-muted: #13151a;
+            --floating-surface: #181b21;
+            --status-surface: #21252d;
+            --border: #2e3440;
+            --border-hover: #434c5e;
+            --border-focus: #3b82f6;
+            --text: #f3f4f6;
+            --textarea-text: #f3f4f6;
+            --muted: #9ca3af;
+            --accent: #3b82f6;
+            --accent-strong: #2563eb;
+            --accent-dim: rgba(59, 130, 246, 0.15);
+            --success: #10b981;
+            --button: #21252d;
+            --button-hover: #2e3440;
+            --button-text: #f3f4f6;
+            --copy-text: #f3f4f6;
+            --copy-bg: #21252d;
+            --copy-hover: #2e3440;
+            --kbd-bg: #21252d;
+            --kbd-border: #434c5e;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+            --bg: #eef1f6;
+            --page-surface: #ffffff;
+            --surface: #f8fafc;
+            --surface-muted: #ffffff;
+            --floating-surface: #ffffff;
+            --status-surface: #ffffff;
+            --border: #d8dee9;
+            --border-hover: #c4cdd8;
+            --border-focus: #3b82f6;
+            --text: #1f2937;
+            --textarea-text: #1f2937;
+            --muted: #6b7280;
+            --accent: #3b82f6;
+            --accent-strong: #2563eb;
+            --accent-dim: rgba(59, 130, 246, 0.12);
+            --success: #059669;
+            --button: #f8fafc;
+            --button-hover: #e5e7eb;
+            --button-text: #1f2937;
+            --copy-text: #1f2937;
+            --copy-bg: #f8fafc;
+            --copy-hover: #e5e7eb;
+            --kbd-bg: #f8fafc;
+            --kbd-border: #d8dee9;
+            --shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -1px rgba(15, 23, 42, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #1e1e2f;
-            color: #fff;
+            min-width: 0;
+            min-height: 100vh;
             margin: 0;
-            padding: 20px;
+            padding: 8px;
+            font-family: Inter, 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            transition: color 180ms ease, background-color 180ms ease;
+        }
+
+        button,
+        textarea {
+            font: inherit;
+        }
+
+        .page {
+            width: min(100%, 1680px);
+            margin: 0 auto;
+            padding: 12px;
+            background: var(--page-surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
             display: flex;
-            flex-direction: column;
             align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
         }
 
-        h2 {
-            color: #4da6ff;
-            text-align: center;
-            margin-bottom: 5px;
+        h1 {
+            margin: 0;
+            font-size: clamp(22px, 2.6vw, 28px);
+            line-height: 1.2;
+            letter-spacing: -0.015em;
         }
 
-        .container {
+        .subtitle {
+            max-width: 680px;
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .hero-actions {
+            flex: 0 0 auto;
             display: flex;
-            gap: 20px;
-            width: 100%;
-            max-width: 1800px;
+            align-items: center;
+            gap: 8px;
         }
 
-        .box {
-            flex: 1;
+        .status-pill {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            min-height: 34px;
+            padding: 6px 10px;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 700;
+            background: var(--status-surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: none;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--muted);
+            border-radius: 50%;
+        }
+
+        .status-pill.ready .status-dot {
+            background: var(--success);
+            box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.13);
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .panel {
+            min-width: 0;
+            overflow: hidden;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: none;
+        }
+
+        .panel-header {
+            min-height: 58px;
+            padding: 10px;
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 1px solid var(--border);
         }
 
-        label {
-            margin-bottom: 8px;
-            font-weight: bold;
-            color: #aaa;
+        .panel-title {
+            display: block;
+            color: var(--text);
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .panel-hint {
+            display: block;
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .counter {
+            flex: 0 0 auto;
+            color: var(--muted);
+            font: 700 12px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
         }
 
         textarea {
+            display: block;
             width: 100%;
-            height: 500px;
-            padding: 15px;
-            font-size: 14px;
-            font-family: monospace;
-            background-color: #2a2a3f;
-            color: #fff;
-            border: 1px solid #444;
-            border-radius: 8px;
+            min-height: 500px;
+            padding: 10px;
+            color: var(--textarea-text);
+            font: 15px/1.55 Consolas, ui-monospace, SFMono-Regular, monospace;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            outline: none;
             resize: vertical;
+            scrollbar-color: #475569 transparent;
         }
 
-        .controls {
-            margin: 20px 0;
+        textarea::placeholder {
+            color: #64748b;
+        }
+
+        textarea:focus {
+            background: var(--surface-muted);
+            box-shadow: inset 0 0 0 1px var(--border-focus), inset 0 0 0 3px var(--accent-dim);
+        }
+
+        textarea[readonly] {
+            background: var(--surface-muted);
+        }
+
+        .toolbar {
             display: flex;
-            gap: 15px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 8px;
+            padding: 0;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         button {
-            padding: 12px 24px;
-            font-size: 16px;
-            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 34px;
+            padding: 8px 16px;
+            color: var(--button-text);
+            font-size: 15px;
+            font-weight: 500;
+            background: var(--button);
+            border: 1px solid transparent;
+            border-radius: 6px;
             cursor: pointer;
-            background-color: #4da6ff;
-            color: #1e1e2f;
-            border: none;
-            border-radius: 8px;
+            transition: transform 150ms ease, background 150ms ease, border-color 150ms ease;
         }
 
         button:hover {
-            background-color: #3388dd;
+            background: var(--button-hover);
+            border-color: var(--border-hover);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:focus-visible {
+            outline: 3px solid rgba(96, 165, 250, 0.4);
+            outline-offset: 2px;
+        }
+
+        .btn-primary {
+            min-width: 150px;
+            color: white;
+            background: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-strong);
+        }
+
+        .btn-ghost {
+            color: var(--text);
+            background: transparent;
+            border-color: var(--border);
         }
 
         .btn-copy {
-            background-color: #28a745;
-            color: white;
+            flex: 0 0 auto;
+            min-height: 30px;
+            padding: 6px 10px;
+            color: var(--copy-text);
+            font-size: 13px;
+            background: var(--copy-bg);
+            border-color: var(--border);
+        }
+
+        .btn-copy:hover,
+        .btn-copy.copied {
+            color: var(--copy-text);
+            background: var(--copy-hover);
+        }
+
+        .theme-toggle {
+            min-height: 34px;
+            padding: 6px 10px;
+            color: var(--text);
+            background: var(--status-surface);
+            border-color: var(--border);
+            box-shadow: none;
+        }
+
+        .theme-icon {
+            width: 18px;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .shortcut {
+            color: var(--muted);
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        kbd {
+            padding: 3px 6px;
+            color: var(--button-text);
+            font: 700 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+            background: var(--kbd-bg);
+            border: 1px solid var(--kbd-border);
+            border-radius: 5px;
+            box-shadow: 0 1px 0 #020617;
+        }
+
+        .app-footer {
+            padding: 12px 4px 0;
+            color: var(--muted);
+            font-size: 12px;
+            text-align: center;
+        }
+
+        @media (max-width: 1100px) {
+            .workspace {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .input-panel {
+                grid-column: 1 / -1;
+            }
+
+            textarea {
+                min-height: 360px;
+            }
+        }
+
+        @media (max-width: 700px) {
+            body {
+                padding: 6px;
+            }
+
+            .hero {
+                align-items: stretch;
+                gap: 8px;
+            }
+
+            .hero-actions {
+                justify-content: space-between;
+            }
+
+            .workspace {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .input-panel {
+                grid-column: auto;
+            }
+
+            .panel-header {
+                min-height: 56px;
+            }
+
+            textarea {
+                min-height: 300px;
+            }
+
+            .toolbar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .toolbar-actions,
+            .toolbar-actions button {
+                width: 100%;
+            }
+
+            .shortcut {
+                display: none;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            button {
+                transition: none;
+            }
         }
     </style>
 </head>
 
 <body>
+    <main class="page">
+        <header class="hero">
+            <div>
+                <h1>Парсер координат та мін</h1>
+                <p class="subtitle">Вставте вихідне повідомлення, щоб згрупувати результати за статусом і конвертувати координати в MGRS.</p>
+            </div>
+            <div class="hero-actions">
+                <button class="theme-toggle" id="themeToggle" type="button" onclick="toggleTheme()" aria-pressed="false" aria-label="Увімкнути світлу тему">
+                    <span class="theme-icon" id="themeIcon" aria-hidden="true">☀</span>
+                    <span id="themeLabel">День</span>
+                </button>
+                <div class="status-pill" id="statusPill" aria-live="polite">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    <span id="statusSummary">Очікує дані</span>
+                </div>
+            </div>
+        </header>
 
-    <h2>Парсер координат та мін <small style="font-size: 14px; color: #aaa;">(by Rain)</small></h2>
+        <section class="workspace" aria-label="Робоча область парсера">
+            <article class="panel input-panel">
+                <div class="panel-header">
+                    <div>
+                        <label class="panel-title" for="inputData">Вихідний текст</label>
+                        <span class="panel-hint">Вставте повідомлення з координатами та статусами</span>
+                    </div>
+                    <span class="counter" id="inputCounter">0 символів</span>
+                </div>
+                <textarea id="inputData" spellcheck="false" placeholder="Наприклад:&#10;1. 5322780 7305139 ПТМ 2 шт ✅"></textarea>
+            </article>
 
-    <div class="container">
-        <div class="box">
-            <label>Вихідний текст:</label>
-            <textarea id="inputData" placeholder="Вставте текст..."></textarea>
-        </div>
-        <div class="box">
-            <label>Результат:</label>
-            <textarea id="outputData"></textarea>
-        </div>
-        <div class="box">
-            <label>Координати MGRS:</label>
-            <textarea id="outputMgrs"></textarea>
-        </div>
-    </div>
+            <article class="panel">
+                <div class="panel-header">
+                    <div>
+                        <label class="panel-title" for="outputData">Результат</label>
+                        <span class="panel-hint">Згруповано за статусом</span>
+                    </div>
+                    <button class="btn-copy" type="button" onclick="copyResult(this)" aria-label="Скопіювати звичайні координати">Копіювати</button>
+                </div>
+                <textarea id="outputData" readonly placeholder="Результат з’явиться після обробки"></textarea>
+            </article>
 
-    <div class="controls">
-        <button onclick="processData()">Обробити текст</button>
-        <button class="btn-copy" onclick="copyResult(this)">Скопіювати</button>
-        <button class="btn-copy" onclick="copyMgrsCoords(this)">Координати MGRS</button>
-    </div>
+            <article class="panel">
+                <div class="panel-header">
+                    <div>
+                        <label class="panel-title" for="outputMgrs">Координати MGRS</label>
+                        <span class="panel-hint">Точність координат — 1 метр</span>
+                    </div>
+                    <button class="btn-copy" type="button" onclick="copyMgrsCoords(this)" aria-label="Скопіювати координати MGRS">Копіювати</button>
+                </div>
+                <textarea id="outputMgrs" readonly placeholder="MGRS-координати з’являться тут"></textarea>
+            </article>
+        </section>
+
+        <div class="toolbar">
+            <div class="toolbar-actions">
+                <button class="btn-primary" type="button" onclick="processData()">Обробити текст</button>
+                <button class="btn-ghost" type="button" onclick="clearData()">Очистити</button>
+            </div>
+            <span class="shortcut"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> — обробити</span>
+        </div>
+
+        <footer class="app-footer">Версія 2.1 (02.07.2026)</footer>
+    </main>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.10.0/proj4.js"></script>
     <script src="https://unpkg.com/mgrs/dist/mgrs.min.js"></script>
@@ -347,9 +723,9 @@
 
         function buildOutput(aggregated, formatCoords) {
             const categories = [
-                { key: '✅', title: 'Вдало ✅:' },
-                { key: '❌', title: 'Невдало ❌:' },
-                { key: '❓', title: 'Без статусу ❓:' }
+                { key: '✅', title: 'Вдало:' },
+                { key: '❌', title: 'Невдало:' },
+                { key: '❓', title: 'Без статусу:' }
             ];
             let output = '';
             for (const cat of categories) {
@@ -436,15 +812,33 @@
             const emptyMsg = 'Дані не знайдені.';
             document.getElementById('outputData').value = output || emptyMsg;
             document.getElementById('outputMgrs').value = mgrsOutput ? normalizeMgrsUnits(mgrsOutput) : emptyMsg;
+
+            const statusPill = document.getElementById('statusPill');
+            const statusSummary = document.getElementById('statusSummary');
+            statusPill.classList.toggle('ready', records.length > 0);
+            statusSummary.textContent = records.length > 0
+                ? `Знайдено записів: ${records.length}`
+                : 'Дані не знайдені';
         }
 
-        function copyTextarea(textareaId, btn, successText) {
+        async function copyTextarea(textareaId, btn, successText) {
             const output = document.getElementById(textareaId);
-            output.select();
-            document.execCommand('copy');
+            if (!output.value || output.value === 'Дані не знайдені.') return;
+
+            try {
+                await navigator.clipboard.writeText(output.value);
+            } catch {
+                output.select();
+                document.execCommand('copy');
+            }
+
             const originalText = btn.innerText;
             btn.innerText = successText;
-            setTimeout(() => btn.innerText = originalText, 2000);
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.classList.remove('copied');
+            }, 1600);
         }
 
         function copyResult(btn) {
@@ -454,6 +848,48 @@
         function copyMgrsCoords(btn) {
             copyTextarea('outputMgrs', btn, 'Скопійовано!');
         }
+
+        function clearData() {
+            document.getElementById('inputData').value = '';
+            document.getElementById('outputData').value = '';
+            document.getElementById('outputMgrs').value = '';
+            document.getElementById('inputCounter').textContent = '0 символів';
+            document.getElementById('statusSummary').textContent = 'Очікує дані';
+            document.getElementById('statusPill').classList.remove('ready');
+            document.getElementById('inputData').focus();
+        }
+
+        function applyTheme(theme, persist = true) {
+            const isLight = theme === 'light';
+            document.documentElement.dataset.theme = isLight ? 'light' : 'dark';
+
+            const toggle = document.getElementById('themeToggle');
+            toggle.setAttribute('aria-pressed', String(isLight));
+            toggle.setAttribute('aria-label', isLight ? 'Увімкнути темну тему' : 'Увімкнути світлу тему');
+            document.getElementById('themeIcon').textContent = isLight ? '☾' : '☀';
+            document.getElementById('themeLabel').textContent = isLight ? 'Ніч' : 'День';
+
+            if (persist) localStorage.setItem('mines-parser-theme', isLight ? 'light' : 'dark');
+        }
+
+        function toggleTheme() {
+            const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+            applyTheme(nextTheme);
+        }
+
+        applyTheme(document.documentElement.dataset.theme, false);
+
+        const inputData = document.getElementById('inputData');
+        inputData.addEventListener('input', () => {
+            document.getElementById('inputCounter').textContent = `${inputData.value.length} символів`;
+        });
+
+        inputData.addEventListener('keydown', event => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                processData();
+            }
+        });
     </script>
 
 </body>

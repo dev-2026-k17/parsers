@@ -112,7 +112,15 @@
     <script src="https://unpkg.com/mgrs/dist/mgrs.min.js"></script>
     <script>
         // Список сигнатур мін
-        const SIGNATURES = ['ПТМР', 'ПТРМ', 'ПТМ', 'ПОМ', 'ОЗМ', 'ВОГ', 'ДЖ', 'ТМ', 'УК', 'ПМН', 'МОН', 'ПФМ', 'РПГ', 'ПГ'];
+        const SIGNATURES = [
+            'ПТМР', 'ПТРМ', 'ПТМ', 'ПОМ', 'ОЗМ', 'ВОГ', 'ДЖ', 'ПЕЧЕНЬКИ',
+            'ПАЛЕТКИ', 'ШАЙБА', 'КИСЛИНКА', 'ТМ', 'УК', 'ПМН', 'МОН', 'ПФМ',
+            'РПГ', 'ПГ'
+        ];
+
+        const MINE_ROOT_RE = /^(?:пом|птм|тм|озм|вог|тбг|птмр|птрм|дж|ук|палет[а-яё]*|шайб[а-яё]*|кислин[а-яё]*)$/i;
+        const INFLECTED_MINE_RE = /(?:палет[а-яё]*|шайб[а-яё]*|кислин[а-яё]*)/gi;
+        const ALLOWED_MODIFIER_RE = /^(?:джоник.*|дж|обл)$/i;
         
         
         // Стоп-слова для обрізання назви міни в межах одного рядка
@@ -144,16 +152,12 @@
 
         // Покращений Розумний фільтр окремих слів міни
         function smartMineFilter(line) {
-            // Додано сигнатури ДЖ та УК безпосередньо в корінь
-            const mineRoots = /^(пом|птм|тм|озм|вог|тбг|птмр|птрм|дж|ук)$/i;
-            const allowedModifiers = /^(джоник.*|дж|обл)$/i;
-            
             let tokens = line.split(/\s+/);
             let hasMineRoot = false;
             
             for (let token of tokens) {
                 let cleanToken = token.replace(/[.,\(\)]/g, '');
-                if (mineRoots.test(cleanToken)) {
+                if (MINE_ROOT_RE.test(cleanToken)) {
                     hasMineRoot = true;
                     break;
                 }
@@ -167,8 +171,8 @@
                 let cleanToken = token.replace(/[.,\(\)]/g, '');
                 if (!cleanToken) continue;
                 
-                const isRoot = mineRoots.test(cleanToken);
-                const isAllowedMod = allowedModifiers.test(cleanToken);
+                const isRoot = MINE_ROOT_RE.test(cleanToken);
+                const isAllowedMod = ALLOWED_MODIFIER_RE.test(cleanToken);
 
                 if (isRoot || isAllowedMod) {
                     filteredTokens.push(token);
@@ -185,7 +189,7 @@
                         for (let j = i - 1; j >= 0; j--) {
                             let prevClean = tokens[j].replace(/[.,\(\)]/g, '');
                             if (prevClean) {
-                                if (mineRoots.test(prevClean)) precededByRoot = true;
+                                if (MINE_ROOT_RE.test(prevClean)) precededByRoot = true;
                                 break;
                             }
                         }
@@ -226,6 +230,13 @@
                 }
             });
 
+            // Відмінювані назви можуть не збігатися з фіксованою сигнатурою.
+            for (const match of p.matchAll(INFLECTED_MINE_RE)) {
+                if (firstIdx === -1 || match.index < firstIdx) {
+                    firstIdx = match.index;
+                }
+            }
+
             if (firstIdx !== -1) {
                 let tail = p.substring(firstIdx);
                 
@@ -234,8 +245,7 @@
                 
                 let endIdx = tail.length;
                 
-                stopMarkers = STOP_MARKERS;
-                stopMarkers.forEach(marker => {
+                STOP_MARKERS.forEach(marker => {
                     let mIdx = tail.toLowerCase().indexOf(marker.toLowerCase());
                     if (mIdx !== -1 && mIdx < endIdx) endIdx = mIdx;
                 });
@@ -372,7 +382,7 @@
 
             for (let p of paragraphs) {
                 p = p.normalize('NFKC').replace(/[\u202F\u00A0]/g, ' ').trim();
-                if (!p) continue;
+                if (!p || p.includes('google.com')) continue;
 
                 // Витягуємо координати
                 const coords = extractCoords(p);
